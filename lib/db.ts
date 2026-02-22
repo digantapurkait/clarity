@@ -10,11 +10,14 @@ const pool = mysql.createPool({
     connectionLimit: 10,
     queueLimit: 0,
     charset: 'utf8mb4',
+    ssl: process.env.DATABASE_SSL === 'true' ? {
+        rejectUnauthorized: true
+    } : undefined
 });
 
 export default pool;
 
-export async function query<T = unknown>(sql: string, params?: unknown[]): Promise<T> {
-    const [rows] = await pool.execute(sql, params);
+export async function query<T = unknown>(sql: string, params?: any[]): Promise<T> {
+    const [rows] = await pool.execute(sql, params || []);
     return rows as T;
 }
