@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { chat } from '@/lib/openai';
 
 // Simple admin auth — checks header against env var
 function isAdmin(req: NextRequest): boolean {
