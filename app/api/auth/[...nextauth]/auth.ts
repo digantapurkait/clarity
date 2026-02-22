@@ -76,11 +76,11 @@ export const authOptions: AuthOptions = {
                 'INSERT INTO sessions_auth (id, session_token, user_id, expires) VALUES (?, ?, ?, ?)',
                 [data.sessionToken, data.sessionToken, data.userId, data.expires]
             );
-            return data;
+            return { ...data, id: data.sessionToken };
         },
         async getSessionAndUser(sessionToken: string) {
-            const rows = await query<{ session_token: string; user_id: number; expires: Date; email: string; name: string | null }[]>(
-                `SELECT s.session_token, s.user_id, s.expires, u.email, u.name
+            const rows = await query<{ id: string; session_token: string; user_id: number; expires: Date; email: string; name: string | null }[]>(
+                `SELECT s.id, s.session_token, s.user_id, s.expires, u.email, u.name
          FROM sessions_auth s JOIN users u ON s.user_id = u.id
          WHERE s.session_token = ?`,
                 [sessionToken]
@@ -88,7 +88,7 @@ export const authOptions: AuthOptions = {
             const r = Array.isArray(rows) ? rows[0] : null;
             if (!r) return null;
             return {
-                session: { sessionToken: r.session_token, userId: String(r.user_id), expires: r.expires },
+                session: { id: r.id, sessionToken: r.session_token, userId: String(r.user_id), expires: r.expires },
                 user: { id: String(r.user_id), email: r.email, name: r.name, emailVerified: null },
             };
         },
@@ -96,13 +96,13 @@ export const authOptions: AuthOptions = {
             if (data.expires) {
                 await query('UPDATE sessions_auth SET expires = ? WHERE session_token = ?', [data.expires, data.sessionToken]);
             }
-            const rows = await query<{ session_token: string; user_id: number; expires: Date }[]>(
-                'SELECT session_token, user_id, expires FROM sessions_auth WHERE session_token = ?',
+            const rows = await query<{ id: string; session_token: string; user_id: number; expires: Date }[]>(
+                'SELECT id, session_token, user_id, expires FROM sessions_auth WHERE session_token = ?',
                 [data.sessionToken]
             );
             const r = Array.isArray(rows) ? rows[0] : null;
             if (!r) return null;
-            return { sessionToken: r.session_token, userId: String(r.user_id), expires: r.expires };
+            return { id: r.id, sessionToken: r.session_token, userId: String(r.user_id), expires: r.expires };
         },
         async deleteSession(sessionToken: string) {
             await query('DELETE FROM sessions_auth WHERE session_token = ?', [sessionToken]);
