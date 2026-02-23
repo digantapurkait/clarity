@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { sendSmsOtp } from '@/lib/auth/providers/textlocal';
+import { sendSmsOtp } from '@/lib/auth/providers/fast2sms';
 
 export async function POST(req: NextRequest) {
     try {
