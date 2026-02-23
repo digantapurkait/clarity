@@ -11,11 +11,12 @@ const pool = mysql.createPool({
         database: process.env.DATABASE_NAME || 'mindmantra',
     }),
     connectionLimit: 10,
+    connectTimeout: 10000, // 10s timeout
     waitForConnections: true,
     queueLimit: 0,
     charset: 'utf8mb4',
     ssl: process.env.DATABASE_SSL === 'true' ? {
-        rejectUnauthorized: true
+        rejectUnauthorized: false // Often required for Railway/PlanetScale public proxies
     } : undefined
 });
 
