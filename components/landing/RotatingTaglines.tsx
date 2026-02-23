@@ -7,7 +7,7 @@ const TAGLINES = [
     "You’ve been trying to fix symptoms instead of seeing the underlying structure.",
     "You don’t feel stuck randomly. You repeat invisible patterns — until you see them.",
     "The earlier you see your pattern, the easier life becomes.",
-    "Nothing changes until you see the pattern you’ve been living inside."
+    "Nothing changes until you see the pattern you’ve been living inside. --UNTIL NOW"
 ];
 
 export default function RotatingTaglines() {

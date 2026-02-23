@@ -26,8 +26,6 @@ const SEQUENCE: SequenceItem[] = [
     { type: 'pause', duration: 2000 },
     { type: 'erase' },
     { type: 'type', text: "You’re not stuck. You’re repeating a pattern you haven’t seen yet." },
-    { type: 'pause', duration: 1500 },
-    { type: 'boom', text: "--UNTIL NOW" },
     { type: 'pause', duration: 3000 },
     { type: 'erase' },
 ];
