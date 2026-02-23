@@ -1,5 +1,6 @@
 import NextAuth, { AuthOptions } from 'next-auth';
 import EmailProvider from 'next-auth/providers/email';
+import { Adapter } from 'next-auth/adapters';
 import { query } from '@/lib/db';
 
 export const authOptions: AuthOptions = {
@@ -17,15 +18,15 @@ export const authOptions: AuthOptions = {
         }),
     ],
     adapter: {
-        async createUser(data: { email: string; name?: string | null; emailVerified?: Date | null }) {
+        async createUser(data) {
             const result = await query<{ insertId: number }>(
                 'INSERT INTO users (email, name) VALUES (?, ?)',
                 [data.email, data.name || null]
             );
-            const id = (result as unknown as { insertId: number }).insertId;
+            const id = (result as any).insertId;
             return { id: String(id), email: data.email, name: data.name || null, emailVerified: null };
         },
-        async getUser(id: string) {
+        async getUser(id) {
             const rows = await query<{ id: number; email: string; name: string | null }[]>(
                 'SELECT id, email, name FROM users WHERE id = ?', [id]
             );
@@ -33,7 +34,7 @@ export const authOptions: AuthOptions = {
             if (!u) return null;
             return { id: String(u.id), email: u.email, name: u.name, emailVerified: null };
         },
-        async getUserByEmail(email: string) {
+        async getUserByEmail(email) {
             const rows = await query<{ id: number; email: string; name: string | null }[]>(
                 'SELECT id, email, name FROM users WHERE email = ?', [email]
             );
@@ -41,7 +42,7 @@ export const authOptions: AuthOptions = {
             if (!u) return null;
             return { id: String(u.id), email: u.email, name: u.name, emailVerified: null };
         },
-        async getUserByAccount({ provider, providerAccountId }: { provider: string; providerAccountId: string }) {
+        async getUserByAccount({ provider, providerAccountId }) {
             const rows = await query<{ user_id: number; email: string; name: string | null }[]>(
                 `SELECT u.id as user_id, u.email, u.name FROM accounts a
          JOIN users u ON a.user_id = u.id
@@ -52,7 +53,7 @@ export const authOptions: AuthOptions = {
             if (!u) return null;
             return { id: String(u.user_id), email: u.email, name: u.name, emailVerified: null };
         },
-        async updateUser(data: { id: string; name?: string | null; email?: string }) {
+        async updateUser(data) {
             if (data.name) await query('UPDATE users SET name = ? WHERE id = ?', [data.name, data.id]);
             const rows = await query<{ id: number; email: string; name: string | null }[]>(
                 'SELECT id, email, name FROM users WHERE id = ?', [data.id]
@@ -60,7 +61,7 @@ export const authOptions: AuthOptions = {
             const u = Array.isArray(rows) ? rows[0] : { id: Number(data.id), email: data.email || '', name: data.name || null };
             return { id: String(u.id), email: (u as { email: string }).email, name: (u as { name: string | null }).name, emailVerified: null };
         },
-        async linkAccount(account: Record<string, unknown>) {
+        async linkAccount(account) {
             const id = `${account.provider}-${account.providerAccountId}`;
             await query(
                 `INSERT IGNORE INTO accounts (id, user_id, type, provider, provider_account_id, access_token, expires_at, token_type, scope, id_token)
@@ -69,16 +70,16 @@ export const authOptions: AuthOptions = {
                     account.access_token || null, account.expires_at || null,
                     account.token_type || null, account.scope || null, account.id_token || null]
             );
-            return account;
+            return account as any;
         },
-        async createSession(data: { sessionToken: string; userId: string; expires: Date }) {
+        async createSession(data) {
             await query(
                 'INSERT INTO sessions_auth (id, session_token, user_id, expires) VALUES (?, ?, ?, ?)',
                 [data.sessionToken, data.sessionToken, data.userId, data.expires]
             );
             return { ...data, id: data.sessionToken };
         },
-        async getSessionAndUser(sessionToken: string) {
+        async getSessionAndUser(sessionToken) {
             const rows = await query<{ id: string; session_token: string; user_id: number; expires: Date; email: string; name: string | null }[]>(
                 `SELECT s.id, s.session_token, s.user_id, s.expires, u.email, u.name
          FROM sessions_auth s JOIN users u ON s.user_id = u.id
@@ -92,7 +93,7 @@ export const authOptions: AuthOptions = {
                 user: { id: String(r.user_id), email: r.email, name: r.name, emailVerified: null },
             };
         },
-        async updateSession(data: { sessionToken: string; expires?: Date }) {
+        async updateSession(data) {
             if (data.expires) {
                 await query('UPDATE sessions_auth SET expires = ? WHERE session_token = ?', [data.expires, data.sessionToken]);
             }
@@ -104,17 +105,17 @@ export const authOptions: AuthOptions = {
             if (!r) return null;
             return { id: r.id, sessionToken: r.session_token, userId: String(r.user_id), expires: r.expires };
         },
-        async deleteSession(sessionToken: string) {
+        async deleteSession(sessionToken) {
             await query('DELETE FROM sessions_auth WHERE session_token = ?', [sessionToken]);
         },
-        async createVerificationToken(data: { identifier: string; token: string; expires: Date }) {
+        async createVerificationToken(data) {
             await query(
                 'INSERT INTO verification_tokens (identifier, token, expires) VALUES (?, ?, ?)',
                 [data.identifier, data.token, data.expires]
             );
             return data;
         },
-        async useVerificationToken({ identifier, token }: { identifier: string; token: string }) {
+        async useVerificationToken({ identifier, token }) {
             const rows = await query<{ identifier: string; token: string; expires: Date }[]>(
                 'SELECT * FROM verification_tokens WHERE identifier = ? AND token = ?',
                 [identifier, token]
@@ -124,7 +125,7 @@ export const authOptions: AuthOptions = {
             await query('DELETE FROM verification_tokens WHERE identifier = ? AND token = ?', [identifier, token]);
             return r;
         },
-    },
+    } as Adapter,
     pages: {
         signIn: '/auth/signin',
     },
