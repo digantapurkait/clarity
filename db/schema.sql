@@ -9,7 +9,7 @@ USE mindmantra;
 -- ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
   id                   INT PRIMARY KEY AUTO_INCREMENT,
-  email                VARCHAR(255) UNIQUE NOT NULL,
+  email                VARCHAR(255) UNIQUE NULL,
   phone                VARCHAR(20) UNIQUE,
   name                 VARCHAR(255),
   personality_summary  TEXT,
