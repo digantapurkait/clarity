@@ -3,6 +3,7 @@
 :root {
   --bg-deep: #0a0a0f;
   --bg-card: #111118;
+  --bg-card-rgb: 17, 17, 24;
   --bg-card-hover: #16161f;
   --border: rgba(255, 255, 255, 0.06);
   --border-active: rgba(139, 92, 246, 0.4);
@@ -10,11 +11,31 @@
   --text-secondary: #9b93b8;
   --text-muted: #5a5473;
   --accent: #8b5cf6;
+  --accent-rgb: 139, 92, 246;
   --accent-soft: rgba(139, 92, 246, 0.15);
   --accent-glow: rgba(139, 92, 246, 0.3);
   --ai-bubble: #131320;
   --user-bubble: rgba(139, 92, 246, 0.12);
   --mantra: rgba(251, 191, 36, 0.1);
+}
+
+.light {
+  --bg-deep: #f8f9fc;
+  --bg-card: #ffffff;
+  --bg-card-rgb: 255, 255, 255;
+  --bg-card-hover: #f0f2f7;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-active: rgba(139, 92, 246, 0.6);
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a4a6a;
+  --text-muted: #7c7c9c;
+  --accent: #7c3aed;
+  --accent-rgb: 124, 58, 237;
+  --accent-soft: rgba(124, 58, 237, 0.1);
+  --accent-glow: rgba(124, 58, 237, 0.2);
+  --ai-bubble: #f0f2f7;
+  --user-bubble: rgba(124, 58, 237, 0.08);
+  --mantra: rgba(251, 191, 36, 0.15);
 }
 
 * {
@@ -156,6 +177,7 @@ body {
     opacity: 0;
   }
 }
+
 /* Clarity Snapshot Card */
 .cl-snapshot-card {
   box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5), 0 0 20px rgba(139, 92, 246, 0.1);
@@ -169,9 +191,20 @@ body {
 }
 
 @keyframes pulse {
-  0% { transform: scale(0.95); opacity: 0.5; }
-  50% { transform: scale(1.05); opacity: 0.8; }
-  100% { transform: scale(0.95); opacity: 0.5; }
+  0% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
 }
 
 .animate-pulse {

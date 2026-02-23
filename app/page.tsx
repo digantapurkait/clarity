@@ -1,90 +1,102 @@
 import Link from 'next/link';
+import RotatingTaglines from '@/components/landing/RotatingTaglines';
+import Typeflow from '@/components/landing/Typeflow';
+import ThemeToggle from '@/components/landing/ThemeToggle';
 import DemoChat from '@/components/landing/DemoChat';
-import Typewriter from '@/components/landing/Typewriter';
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen bg-[var(--bg-deep)] overflow-x-hidden">
+    <main className="min-h-screen bg-[var(--bg-deep)] overflow-x-hidden transition-colors duration-500">
       {/* Nav */}
-      <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex justify-between items-center border-b border-[var(--border)] bg-[rgba(10,10,15,0.8)] backdrop-blur-md">
+      <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex justify-between items-center border-b border-[var(--border)] bg-[rgba(var(--bg-card-rgb),0.8)] backdrop-blur-md">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-[var(--accent)] flex items-center justify-center text-white text-xs font-bold">M</div>
           <span className="font-semibold text-[var(--text-primary)] tracking-tight">MindMantra</span>
         </div>
-        <Link
-          href="/auth/signin"
-          className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors uppercase tracking-wider"
-        >
-          Sign in
-        </Link>
+        <div className="flex items-center gap-6">
+          <ThemeToggle />
+          <Link
+            href="/auth/signin"
+            className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors uppercase tracking-wider"
+          >
+            Sign in
+          </Link>
+        </div>
       </nav>
 
       {/* Hero */}
-      <section className="relative pt-36 pb-24 px-6 text-center max-w-3xl mx-auto">
+      <section className="relative pt-36 pb-24 px-6 text-center max-w-4xl mx-auto">
         {/* Ambient orb */}
-        <div className="hero-orb left-1/2 top-0 -translate-x-1/2 -translate-y-1/3 opacity-60" />
+        <div className="hero-orb left-1/2 top-0 -translate-x-1/2 -translate-y-1/3 opacity-40 blur-[120px]" />
 
-        <div className="relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-card)] text-xs text-[var(--text-muted)] mb-8">
+        <div className="relative z-10 space-y-12">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-card)] text-xs text-[var(--text-muted)] mb-8 animate-in fade-in duration-1000">
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
-            Not therapy. Not journaling. Something more personal.
-          </div>
-
-          <h1 className="text-4xl sm:text-5xl lg:text-3xl font-semibold text-[var(--text-primary)] leading-[1.15] tracking-tight mb-6">
-            Your mind has patterns. <br />
-            <span className="block text-[var(--accent)] mt-1">Most tools never notice them.</span>
-          </h1>
-
-          <div className="text-lg text-[var(--text-secondary)] leading-relaxed max-w-xl mx-auto mb-12 min-h-[5rem] sm:min-h-[3.5rem]">
-            <Typewriter
-              typingSpeed={60}
-              erasingSpeed={10}
-              phrases={[
-                "You don't need more advice. You need deeper understanding.",
-                "Finally see what keeps repeating beneath your days."
-              ]}
-            />
+            Not therapy. Not journaling. Not advice.
           </div>
 
           <div className="space-y-4">
+            <h1 className="text-5xl sm:text-7xl lg:text-8xl font-bold text-[var(--text-primary)] leading-[1.05] tracking-tight mb-4 transition-all group">
+              “Patterns repeat until wisdom <br />
+              <span className="text-[var(--accent)] drop-shadow-[0_0_15px_var(--accent-glow)]">turns them into Rhyth”</span>
+            </h1>
+            <RotatingTaglines />
+          </div>
+
+          <Typeflow />
+
+          <div className="space-y-6">
             <Link
               id="get-started-cta"
               href="/onboarding"
-              className="inline-flex items-center gap-2 px-7 py-4 bg-[var(--accent)] rounded-2xl text-[15px] font-medium hover:opacity-90 transition-all hover:scale-[1.02] shadow-lg shadow-[var(--accent-glow)]"
+              className="inline-flex items-center gap-2 px-10 py-5 bg-[var(--accent)] rounded-2xl text-[16px] font-bold text-white hover:opacity-90 transition-all hover:scale-[1.02] shadow-[0_10px_30px_rgba(var(--accent-rgb),0.3)] group"
             >
               Start first reflection
-              <span>→</span>
+              <span className="group-hover:translate-x-1 transition-transform">→</span>
             </Link>
 
-            <div className="flex flex-col items-center gap-3">
-              <p className="text-[13px] text-[var(--text-muted)] italic opacity-80">
-                “Last week you mentioned feeling drained after meetings…”
+            <div className="space-y-2">
+              <p className="text-[12px] text-[var(--text-muted)] font-medium tracking-wide">
+                Most users recognize their first pattern within 3-5 minutes.
               </p>
-
-              <div className="flex items-center gap-4 text-[11px] text-[var(--text-muted)] font-medium">
-                <span className="flex items-center gap-1">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Free
-                </span>
-                <span className="flex items-center gap-1">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  Private by default
-                </span>
-                <span>5 minutes</span>
-              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Interactive Demo */}
-      <section className="px-6 pb-24 max-w-lg mx-auto">
-        <p className="text-center text-xs text-[var(--text-muted)] uppercase tracking-widest mb-6">
-          Try it now — no sign-in needed
+      {/* Psychological Goal Section */}
+      <section className="px-6 pb-24 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-500">
+        <div className="p-10 rounded-[32px] bg-[var(--bg-card)] border border-[var(--border)] relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--accent)] opacity-[0.03] blur-[80px]" />
+
+          <h2 className="text-2xl font-semibold text-[var(--text-primary)] mb-8 text-center sm:text-left">
+            What changes when you see your pattern?
+          </h2>
+
+          <div className="grid sm:grid-cols-2 gap-6">
+            {[
+              "You notice burnout days before it hits",
+              "You understand why certain situations drain you",
+              "You stop repeating emotional loops unknowingly",
+              "Decisions feel clearer because triggers are visible"
+            ].map((point, i) => (
+              <div key={i} className="flex gap-4 items-start p-4 rounded-2xl bg-[var(--bg-card-hover)]/30 border border-transparent hover:border-[var(--border)] transition-all">
+                <div className="w-5 h-5 rounded-full bg-[var(--accent-soft)] flex items-center justify-center text-[var(--accent)] shrink-0 mt-0.5">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{point}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Interactive Demo (Minimalist) */}
+      <section className="px-6 pb-28 max-w-lg mx-auto opacity-80 hover:opacity-100 transition-opacity">
+        <p className="text-center text-[10px] text-[var(--text-muted)] uppercase tracking-[0.3em] mb-8 font-bold">
+          Experience the reflection
         </p>
         <DemoChat />
       </section>
