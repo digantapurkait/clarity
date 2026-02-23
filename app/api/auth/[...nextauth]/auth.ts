@@ -158,19 +158,22 @@ export const authOptions: AuthOptions = {
         async signIn({ user, account, profile, email, credentials }) {
             return true;
         },
-        async session({ session, user }) {
-            if (session.user && user) {
-                (session.user as { id?: string }).id = user.id;
-
-                // Merge guest sessions if applicable
-                // Note: We'd ideally pass guestId from the client via headers or a cookie
-                // For this MVP, we'll assume the client calls a separate 'merge' endpoint after sign-in
-                // or we rely on the client passing guestId during the signin flow.
+        async jwt({ token, user }) {
+            if (user) {
+                token.id = user.id;
+                token.name = user.name || user.email?.split('@')[0];
+            }
+            return token;
+        },
+        async session({ session, token }) {
+            if (session.user && token) {
+                (session.user as any).id = token.id;
+                session.user.name = token.name as string;
             }
             return session;
         },
     },
-    session: { strategy: 'database' },
+    session: { strategy: 'jwt' },
 };
 
 export default authOptions;
