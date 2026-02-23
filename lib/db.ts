@@ -1,24 +1,31 @@
 import mysql from 'mysql2/promise';
 
-const pool = mysql.createPool({
-    uri: process.env.DATABASE_URL || process.env.MYSQL_URL,
-    // Fallback for local development if URL is missing
-    ...(process.env.DATABASE_URL || process.env.MYSQL_URL ? {} : {
+const connectionString = process.env.DATABASE_URL || process.env.MYSQL_URL;
+
+const pool = connectionString
+    ? mysql.createPool({
+        uri: connectionString,
+        connectionLimit: 10,
+        connectTimeout: 15000,
+        waitForConnections: true,
+        queueLimit: 0,
+        charset: 'utf8mb4',
+        ssl: process.env.DATABASE_SSL === 'true' ? {
+            rejectUnauthorized: false
+        } : undefined
+    })
+    : mysql.createPool({
         host: process.env.DATABASE_HOST || 'localhost',
         port: Number(process.env.DATABASE_PORT) || 3306,
         user: process.env.DATABASE_USER || 'root',
         password: process.env.DATABASE_PASSWORD || '',
         database: process.env.DATABASE_NAME || 'mindmantra',
-    }),
-    connectionLimit: 10,
-    connectTimeout: 10000, // 10s timeout
-    waitForConnections: true,
-    queueLimit: 0,
-    charset: 'utf8mb4',
-    ssl: process.env.DATABASE_SSL === 'true' ? {
-        rejectUnauthorized: false // Often required for Railway/PlanetScale public proxies
-    } : undefined
-});
+        connectionLimit: 10,
+        connectTimeout: 15000,
+        waitForConnections: true,
+        queueLimit: 0,
+        charset: 'utf8mb4',
+    });
 
 export default pool;
 
