@@ -21,8 +21,63 @@ CREATE TABLE IF NOT EXISTS users (
   clarity_progress      INT DEFAULT 0,
   email_verified        DATETIME,
   phone_verified        DATETIME,
+  subscription_status   ENUM('free', 'premium') DEFAULT 'free',
+  memory_profile_score  INT DEFAULT 0,
+  pii_score             INT DEFAULT 0,
+  curiosity_click_count INT DEFAULT 0,
+  option_click_count    INT DEFAULT 0,
+  last_return_timestamp TIMESTAMP NULL,
   created_at           DATETIME DEFAULT NOW(),
   updated_at           DATETIME DEFAULT NOW() ON UPDATE NOW()
+);
+
+-- ─────────────────────────────────────────────
+-- PATTERN INTELLIGENCE TABLES
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS emotional_events (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NULL,
+  guest_id VARCHAR(255) NULL,
+  session_id INT NULL,
+  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  primary_emotion VARCHAR(50),
+  emotion_intensity INT,
+  energy_level INT,
+  context_tag VARCHAR(100),
+  intent_type VARCHAR(100),
+  trigger_keywords TEXT,
+  sentiment_score FLOAT,
+  cognitive_load_score FLOAT,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS pattern_clusters (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NULL,
+  guest_id VARCHAR(255) NULL,
+  pattern_type VARCHAR(100),
+  frequency_score FLOAT,
+  last_detected TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  confidence_score FLOAT,
+  summary_text TEXT,
+  projected_next_occurrence TIMESTAMP NULL,
+  prevention_suggestion TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS insights (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NULL,
+  guest_id VARCHAR(255) NULL,
+  generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  insight_type VARCHAR(50),
+  insight_text TEXT,
+  source_pattern_id INT NULL,
+  is_viewed BOOLEAN DEFAULT FALSE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (source_pattern_id) REFERENCES pattern_clusters(id) ON DELETE SET NULL
 );
 
 -- ─────────────────────────────────────────────

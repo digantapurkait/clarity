@@ -8,6 +8,13 @@ interface TagResult extends AnalyticalSignals {
     emotional_depth_score: number; // 0–1: how much did user disclose?
     clarity_signal: number;        // 0–1: signs of resolution/clarity
     resistance_level: number;      // 0–1: deflection or pushback
+
+    // New Diagnostic Signals
+    energy_level: number;         // 0-10: 0=burned out, 10=vibrant
+    cognitive_load_score: number; // 0-1: 0=clear, 1=overloaded
+    intent_type: string;          // e.g. "venting", "seeking_clarity", "avoiding"
+    trigger_keywords: string[];   // Specific words indicating stress/patterns
+    sentiment_score: number;      // -1 to 1
 }
 
 interface AnalyticalSignals {
@@ -19,11 +26,15 @@ interface AnalyticalSignals {
 
 export async function extractTags(userMessage: string, historyTranscript?: string): Promise<TagResult> {
     const result = await extractJson<TagResult>(`
-You are analyzing a user's emotional state and patterns.
+You are a Personal Mental Pattern Intelligence System. Analyze the user's message for deep emotional and cognitive signals.
 Context: "${historyTranscript ? historyTranscript.slice(-2000) : ''}"
 Current Message: "${userMessage.slice(0, 500)}"
 
-Extract signals. For analytical signals (archetype, drive, blocker, motivation), only provide if clear from context.
+Extract signals. 
+- cognitive_load_score: 0.0 (clear) to 1.0 (overwhelmed/saturated)
+- energy_level: 0 (total exhaustion) to 10 (high vibrancy)
+- intent_type: what does the user actually WANT in this moment? (venting, clarity, avoidance, validation)
+- trigger_keywords: 2-3 specific phrases/words that seem to trigger this state.
 
 Return JSON:
 {
@@ -33,6 +44,11 @@ Return JSON:
   "emotional_depth_score": 0.0-1.0,
   "clarity_signal": 0.0-1.0,
   "resistance_level": 0.0-1.0,
+  "energy_level": 0-10,
+  "cognitive_load_score": 0.0-1.0,
+  "intent_type": "string",
+  "trigger_keywords": ["string"],
+  "sentiment_score": -1.0-1.0,
   "user_archetype": "builder|explorer|analyzer|dreamer (optional)",
   "dominant_drive": "short string (optional)",
   "recurring_blocker": "short string (optional)",
@@ -46,6 +62,11 @@ Return JSON:
         emotional_depth_score: Number(result.emotional_depth_score) || 0,
         clarity_signal: Number(result.clarity_signal) || 0,
         resistance_level: Number(result.resistance_level) || 0,
+        energy_level: Number(result.energy_level) || 5,
+        cognitive_load_score: Number(result.cognitive_load_score) || 0.5,
+        intent_type: result.intent_type || 'unspecified',
+        trigger_keywords: result.trigger_keywords || [],
+        sentiment_score: Number(result.sentiment_score) || 0,
         user_archetype: result.user_archetype,
         dominant_drive: result.dominant_drive,
         recurring_blocker: result.recurring_blocker,
@@ -65,6 +86,44 @@ export function calculateContextScore(
     const patternWeight = patternsDetected ? 20 : 0;
 
     return Math.round(countWeight + depthWeight + patternWeight);
+}
+
+export function calculatePIIScore(
+    tags: TagResult,
+    currentPII: number
+): number {
+    // PII (Pattern Improvement Index) Logic
+    // Increases based on clarity signal and emotional depth
+    // Decreases slightly on high resistance or extreme cognitive load
+    let delta = 0;
+    if (tags.clarity_signal > 0.7) delta += 5;
+    if (tags.emotional_depth_score > 0.7) delta += 3;
+    if (tags.resistance_level > 0.7) delta -= 2;
+    if (tags.cognitive_load_score > 0.8) delta -= 1;
+
+    return Math.max(0, currentPII + delta);
+}
+
+export async function logEmotionalEvent(
+    userId: number | null,
+    guestId: string | null,
+    sessionId: number | null,
+    tags: TagResult
+): Promise<void> {
+    await query(`
+        INSERT INTO emotional_events (
+            user_id, guest_id, session_id, primary_emotion, emotion_intensity, 
+            energy_level, context_tag, intent_type, trigger_keywords, 
+            sentiment_score, cognitive_load_score
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            userId, guestId, sessionId,
+            tags.mood, Math.round(tags.stress_level * 10),
+            tags.energy_level, tags.topic, tags.intent_type,
+            JSON.stringify(tags.trigger_keywords),
+            tags.sentiment_score, tags.cognitive_load_score
+        ]
+    );
 }
 
 // Update user's frequent_topics and recurring_emotions with recency weighting
@@ -183,19 +242,30 @@ export async function syncConversationState(
     userId: number | null,
     guestId: string | null,
     tags: TagResult,
-    phase: string
+    phase: string,
+    sessionId: number | null
 ): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
 
-    // 1. Update User analytical fields if logged in
+    // Log high-frequency event for pattern engine
+    await logEmotionalEvent(userId, guestId, sessionId, tags).catch(console.error);
+
+    // 1. Update User analytical fields and PII if logged in
     if (userId) {
+        const userRows = await query<{ pii_score: number }[]>(
+            'SELECT pii_score FROM users WHERE id = ?', [userId]
+        );
+        const currentPII = Array.isArray(userRows) && userRows.length > 0 ? userRows[0].pii_score : 0;
+        const newPII = calculatePIIScore(tags, currentPII);
+
         await query(`
             UPDATE users SET 
                 user_archetype = COALESCE(?, user_archetype),
                 clarity_progress = clarity_progress + ?,
+                pii_score = ?,
                 updated_at = NOW()
             WHERE id = ?`,
-            [tags.user_archetype || null, tags.clarity_signal > 0.5 ? 5 : 0, userId]
+            [tags.user_archetype || null, tags.clarity_signal > 0.5 ? 5 : 0, newPII, userId]
         );
     }
 

@@ -3,9 +3,10 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useRef } from 'react';
-import { useSession, signOut } from 'next-auth/react';
-import Link from 'next/link';
 import { t, languages } from '@/lib/i18n';
+import Link from 'next/link';
+import PatternDiscovery from '@/components/chat/PatternDiscovery';
+import { useSession, signOut } from 'next-auth/react';
 
 interface Message {
     role: 'user' | 'assistant';
@@ -28,6 +29,10 @@ export default function ChatPage() {
     const [initialized, setInitialized] = useState(false);
     const [language, setLanguage] = useState('en');
     const [showSignup, setShowSignup] = useState(false);
+    const [lastGenericReply, setLastGenericReply] = useState<string | null>(null);
+    const [showContrast, setShowContrast] = useState(false);
+    const [inactivityTimer, setInactivityTimer] = useState<NodeJS.Timeout | null>(null);
+    const [showRecovery, setShowRecovery] = useState(false);
 
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -107,6 +112,7 @@ export default function ChatPage() {
         if (!isClarityCheck) {
             setMessages((prev) => [...prev, { role: 'user', content: userText }]);
             setInput('');
+            resetInactivityTimer();
         }
         setLoading(true);
 
@@ -218,9 +224,14 @@ export default function ChatPage() {
                         });
                     }
 
+                    if (metadata.genericReply) {
+                        setLastGenericReply(metadata.genericReply);
+                    }
+
                     if (metadata.sealed && !session) {
                         setTimeout(() => setShowSignup(true), 2500);
                     }
+                    resetInactivityTimer();
                 } catch (e) {
                     console.error('Failed to parse session metadata:', e);
                 }
@@ -250,6 +261,22 @@ export default function ChatPage() {
 
     const name = session?.user?.name || session?.user?.email?.split('@')[0] || (session ? 'there' : 'Guest');
 
+    const resetInactivityTimer = () => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        const timer = setTimeout(() => {
+            if (!loading && !typing && !sealed && messages.length > 2) {
+                setShowRecovery(true);
+            }
+        }, 20000);
+        setInactivityTimer(timer);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (inactivityTimer) clearTimeout(inactivityTimer);
+        };
+    }, [inactivityTimer]);
+
     if (!initialized) {
         return (
             <div className="min-h-screen flex items-center justify-center">
@@ -261,6 +288,9 @@ export default function ChatPage() {
             </div>
         );
     }
+
+    // ... inside ChatPage ...
+    const userId = (session?.user as any)?.id || null;
 
     return (
         <div className="min-h-screen flex flex-col relative">
@@ -275,29 +305,33 @@ export default function ChatPage() {
                     <span className="text-sm font-medium text-[var(--text-muted)] hidden sm:block">{name}</span>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <select
-                        value={language}
-                        onChange={(e) => handleLanguageChange(e.target.value)}
-                        className="bg-transparent text-xs text-[var(--text-muted)] border-none focus:ring-0 cursor-pointer"
-                    >
-                        {languages.map(l => <option key={l.code} value={l.code} className="bg-[var(--bg-card)]">{l.name}</option>)}
-                    </select>
+                <div className="flex items-center gap-6">
+                    <PatternDiscovery userId={userId} />
 
-                    {session ? (
-                        <button
-                            onClick={() => signOut({ callbackUrl: '/' })}
-                            className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                    <div className="flex items-center gap-3">
+                        <select
+                            value={language}
+                            onChange={(e) => handleLanguageChange(e.target.value)}
+                            className="bg-transparent text-xs text-[var(--text-muted)] border-none focus:ring-0 cursor-pointer"
                         >
-                            leave
-                        </button>
-                    ) : (
-                        <div className="flex items-center gap-3">
-                            <Link href="/auth/signin" className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
-                                sign in
-                            </Link>
-                        </div>
-                    )}
+                            {languages.map(l => <option key={l.code} value={l.code} className="bg-[var(--bg-card)]">{l.name}</option>)}
+                        </select>
+
+                        {session ? (
+                            <button
+                                onClick={() => signOut({ callbackUrl: '/' })}
+                                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                            >
+                                leave
+                            </button>
+                        ) : (
+                            <div className="flex items-center gap-3">
+                                <Link href="/auth/signin" className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
+                                    sign in
+                                </Link>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </header>
 
@@ -354,6 +388,25 @@ export default function ChatPage() {
                                         } ${msg.isError ? 'border border-red-500/20' : ''}`}
                                 >
                                     {msg.content}
+
+                                    {/* Contrast Toggle for last assistant message */}
+                                    {msg.role === 'assistant' && i === messages.length - 1 && lastGenericReply && (
+                                        <div className="mt-3 pt-3 border-t border-white/5">
+                                            <button
+                                                onClick={() => setShowContrast(!showContrast)}
+                                                className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors font-bold"
+                                            >
+                                                {showContrast ? '← Hide generic AI reply' : '👉 See generic AI reply'}
+                                            </button>
+                                            {showContrast && (
+                                                <div className="mt-2 p-3 rounded-lg bg-[rgba(255,255,255,0.03)] border border-white/5 text-[12px] text-[var(--text-secondary)] italic animate-in fade-in slide-in-from-top-1">
+                                                    <span className="text-[9px] uppercase tracking-widest text-[var(--text-muted)] block mb-1">Standard AI Baseline:</span>
+                                                    {lastGenericReply}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
                                     {msg.suggestions && msg.suggestions.length > 0 && (
                                         <div className="mt-3 flex flex-wrap gap-2">
                                             {msg.suggestions.map(s => (
@@ -398,6 +451,17 @@ export default function ChatPage() {
                         </div>
                     )}
 
+                    {/* Recovery Prompt */}
+                    {showRecovery && !sealed && (
+                        <div className="fixed bottom-32 left-1/2 -translate-x-1/2 w-full max-w-xs p-5 bg-[var(--bg-card)] border border-[var(--accent)] rounded-2xl shadow-2xl animate-in zoom-in-95 fade-in duration-300 z-50">
+                            <p className="text-sm font-medium text-[var(--text-primary)] mb-4 text-center">Want to refine this so the pattern becomes clearer?</p>
+                            <div className="flex flex-col gap-2">
+                                <button onClick={() => { setShowRecovery(false); setInput('Mental overvhelm'); send('Stuck in mind'); }} className="py-2.5 bg-[var(--accent)] rounded-xl text-xs font-bold text-white">Yes, refine it</button>
+                                <button onClick={() => setShowRecovery(false)} className="py-2.5 bg-[var(--bg-deep)] border border-[var(--border)] rounded-xl text-xs text-[var(--text-muted)]">I'm done for now</button>
+                            </div>
+                        </div>
+                    )}
+
                     {showSignup && !session && (
                         <div className="msg-enter p-6 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-active)] shadow-2xl space-y-4 mx-auto max-w-sm">
                             <p className="text-sm text-center text-[var(--text-primary)] font-medium">
@@ -428,6 +492,15 @@ export default function ChatPage() {
 
                 {!sealed && !showSignup && (
                     <div className="pb-6 pt-2 space-y-3 bg-[var(--bg-deep)]">
+                        {/* Option Buttons Engine Sample */}
+                        {!loading && !typing && messages.length > 2 && (
+                            <div className="flex justify-center gap-2 animate-in fade-in slide-in-from-bottom-2">
+                                <button onClick={() => send('Stuck in mind')} className="px-3 py-1.5 rounded-full border border-[var(--border)] text-[11px] bg-[var(--bg-card)] hover:border-[var(--accent)] transition-all">Stuck in mind</button>
+                                <button onClick={() => send('Too many tasks')} className="px-3 py-1.5 rounded-full border border-[var(--border)] text-[11px] bg-[var(--bg-card)] hover:border-[var(--accent)] transition-all">Too many tasks</button>
+                                <button onClick={() => send('Both')} className="px-3 py-1.5 rounded-full border border-[var(--border)] text-[11px] bg-[var(--bg-card)] hover:border-[var(--accent)] transition-all">Both</button>
+                            </div>
+                        )}
+
                         {suggestions.length > 0 && messages.length <= 1 && (
                             <div className="flex flex-wrap gap-2">
                                 {suggestions.map((s) => (

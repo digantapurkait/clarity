@@ -30,9 +30,9 @@ export default function LandingPage() {
             Not therapy. Not journaling. Something more personal.
           </div>
 
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-semibold text-[var(--text-primary)] leading-[1.15] tracking-tight mb-6">
-            A companion that remembers
-            <span className="block text-[var(--accent)] mt-1">who you are becoming</span>
+          <h1 className="text-4xl sm:text-5xl lg:text-3xl font-semibold text-[var(--text-primary)] leading-[1.15] tracking-tight mb-6">
+            Your mind has patterns. <br />
+            <span className="block text-[var(--accent)] mt-1">Most tools never notice them.</span>
           </h1>
 
           <div className="text-lg text-[var(--text-secondary)] leading-relaxed max-w-xl mx-auto mb-12 min-h-[5rem] sm:min-h-[3.5rem]">
@@ -40,8 +40,8 @@ export default function LandingPage() {
               typingSpeed={60}
               erasingSpeed={10}
               phrases={[
-                "MindMantra doesn't give advice. It listens, remembers, and reflects — until you start to see yourself more clearly.",
-                "Talk for 2 minutes. Leave with clarity."
+                "You don't need more advice. You need deeper understanding.",
+                "Finally see what keeps repeating beneath your days."
               ]}
             />
           </div>
@@ -49,10 +49,10 @@ export default function LandingPage() {
           <div className="space-y-4">
             <Link
               id="get-started-cta"
-              href="/chat"
+              href="/onboarding"
               className="inline-flex items-center gap-2 px-7 py-4 bg-[var(--accent)] rounded-2xl text-[15px] font-medium hover:opacity-90 transition-all hover:scale-[1.02] shadow-lg shadow-[var(--accent-glow)]"
             >
-              Start your first clarity session
+              Start first reflection
               <span>→</span>
             </Link>
 

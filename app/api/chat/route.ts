@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
                         const tags = await extractTags(message, transcript);
 
                         // Background: Sync conversation state and archetypes
-                        syncConversationState(userId, guestId, tags, nextPhase).catch(console.error);
+                        syncConversationState(userId, guestId, tags, nextPhase, sessionId).catch(console.error);
                         const newDepth = (session!.emotional_depth_score * 0.4 + tags.emotional_depth_score * 0.6);
                         const newClarity = (session!.clarity_signal * 0.4 + tags.clarity_signal * 0.6);
                         const newResistance = (session!.resistance_level * 0.4 + tags.resistance_level * 0.6);
@@ -218,6 +218,13 @@ export async function POST(req: NextRequest) {
                                 summarizeSession(sessionId).catch(console.error);
                             });
 
+                            // New: Trigger Pattern Intelligence Analysis
+                            if (userId) {
+                                import('@/lib/pattern-engine').then(({ analyzePatterns }) => {
+                                    analyzePatterns(userId!).catch(console.error);
+                                });
+                            }
+
                             if (userId) {
                                 const transcript = (Array.isArray(history) ? history : [] as DBMessage[])
                                     .map((m: DBMessage) => `${m.role === 'user' ? 'User' : 'MindMantra'}: ${m.content}`)
@@ -234,12 +241,24 @@ export async function POST(req: NextRequest) {
                         console.error('Processing background tasks failed:', e);
                     }
 
+                    // Generate Generic Contrast Response (non-streaming for metadata)
+                    let genericReply = "I'm sorry, I couldn't generate a generic contrast right now.";
+                    try {
+                        const genericPrompt = `Provide a standard, helpful, but surface-level AI assistant response to the user's last message. Do NOT apply any pattern intelligence or deep emotional reflection.
+                        Message: "${message}"`;
+                        const genericRes = await chat(genericPrompt, []);
+                        genericReply = genericRes;
+                    } catch (e) {
+                        console.error('Generic reply generation failed:', e);
+                    }
+
                     // Final metadata chunk
                     const metadata = {
                         phase: nextPhase,
                         sealed: nextPhase === 'SEALED',
                         paceMs: PHASE_DELAY_MS[currentPhase],
                         mantra: currentPhase === 'CLOSURE' ? mantra : null,
+                        genericReply: genericReply
                     };
                     controller.enqueue(encoder.encode(`\n\n__METADATA__${JSON.stringify(metadata)}`));
                 } catch (e: any) {
