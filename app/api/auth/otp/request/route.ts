@@ -37,15 +37,21 @@ export async function POST(req: NextRequest) {
 
         // 3. Generate & Send OTP (Default to Email)
         const { code } = await createOtpRecord(user.id, 'email');
-        const sent = await sendEmailOtp(email, code);
 
-        if (!sent) {
-            return NextResponse.json({ error: 'Failed to send verification code' }, { status: 500 });
+        // CRITICAL: Log OTP to server console (check Vercel logs if email fails)
+        console.log(`[AUTH_DEBUG] OTP code for ${email}: ${code}`);
+
+        let emailSent = false;
+        try {
+            emailSent = await sendEmailOtp(email, code);
+        } catch (e: any) {
+            console.error('[AUTH_EMAIL_ERROR]', e.message);
         }
 
         return NextResponse.json({
-            status: 'pending_email',
+            status: emailSent ? 'pending_email' : 'pending_fallback',
             userId: user.id,
+            error: emailSent ? null : 'Primary delivery delayed. Please wait for SMS fallback option.',
             retryAfter: 60
         });
 
