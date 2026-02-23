@@ -1,17 +1,23 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient: Resend | null = null;
+
+function getResendClient() {
+    if (!resendClient) {
+        if (!process.env.RESEND_API_KEY) {
+            throw new Error('RESEND_API_KEY is missing from environment');
+        }
+        resendClient = new Resend(process.env.RESEND_API_KEY);
+    }
+    return resendClient;
+}
 
 /**
  * Sends a 6-digit OTP via Email using Resend.
  */
 export async function sendEmailOtp(email: string, code: string): Promise<boolean> {
     try {
-        if (!process.env.RESEND_API_KEY) {
-            console.error('[RESEND_ERROR] RESEND_API_KEY is missing');
-            return false;
-        }
-
+        const resend = getResendClient();
         const { data, error } = await resend.emails.send({
             from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
             to: [email],
