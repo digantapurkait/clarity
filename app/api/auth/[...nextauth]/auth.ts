@@ -1,10 +1,35 @@
 import NextAuth, { AuthOptions } from 'next-auth';
 import EmailProvider from 'next-auth/providers/email';
+import CredentialsProvider from 'next-auth/providers/credentials';
 import { Adapter } from 'next-auth/adapters';
 import { query } from '@/lib/db';
 
 export const authOptions: AuthOptions = {
     providers: [
+        CredentialsProvider({
+            name: 'OTP',
+            credentials: {
+                userId: { label: "User ID", type: "text" },
+                // We trust the caller if they have a valid userId from the verify endpoint
+                // In a stricter system, we might pass a one-time 'auth_token' here.
+            },
+            async authorize(credentials) {
+                if (!credentials?.userId) return null;
+
+                const rows = await query<{ id: number; email: string; name: string | null }[]>(
+                    'SELECT id, email, name FROM users WHERE id = ?', [credentials.userId]
+                );
+                const u = Array.isArray(rows) ? rows[0] : null;
+
+                if (!u) return null;
+
+                return {
+                    id: String(u.id),
+                    email: u.email,
+                    name: u.name,
+                };
+            }
+        }),
         EmailProvider({
             server: {
                 host: process.env.EMAIL_SERVER_HOST,

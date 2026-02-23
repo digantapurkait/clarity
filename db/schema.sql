@@ -10,6 +10,7 @@ USE mindmantra;
 CREATE TABLE IF NOT EXISTS users (
   id                   INT PRIMARY KEY AUTO_INCREMENT,
   email                VARCHAR(255) UNIQUE NOT NULL,
+  phone                VARCHAR(20) UNIQUE,
   name                 VARCHAR(255),
   personality_summary  TEXT,
   relationship_summary TEXT,
@@ -18,8 +19,38 @@ CREATE TABLE IF NOT EXISTS users (
   preferred_depth       VARCHAR(20),
   challenge_tolerance   VARCHAR(20),
   clarity_progress      INT DEFAULT 0,
+  email_verified        DATETIME,
+  phone_verified        DATETIME,
   created_at           DATETIME DEFAULT NOW(),
   updated_at           DATETIME DEFAULT NOW() ON UPDATE NOW()
+);
+
+-- ─────────────────────────────────────────────
+-- OTP & TRUST SYSTEM
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS otp_logs (
+  id             INT PRIMARY KEY AUTO_INCREMENT,
+  user_id        INT NOT NULL,
+  otp_hash       VARCHAR(255) NOT NULL,
+  channel        ENUM('email', 'sms') NOT NULL,
+  expires_at     DATETIME NOT NULL,
+  attempt_count  INT DEFAULT 0,
+  status         ENUM('pending', 'verified', 'failed', 'expired') DEFAULT 'pending',
+  created_at     DATETIME DEFAULT NOW(),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS trusted_devices (
+  id            INT PRIMARY KEY AUTO_INCREMENT,
+  user_id       INT NOT NULL,
+  device_hash   VARCHAR(255) NOT NULL,
+  ip_hash       VARCHAR(255),
+  browser       VARCHAR(255),
+  trust_score   INT DEFAULT 1,
+  last_used_at  DATETIME DEFAULT NOW(),
+  created_at    DATETIME DEFAULT NOW(),
+  UNIQUE KEY (user_id, device_hash),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- ─────────────────────────────────────────────
