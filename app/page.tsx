@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import RotatingTaglines from '@/components/landing/RotatingTaglines';
 import Typeflow from '@/components/landing/Typeflow';
 import ThemeToggle from '@/components/landing/ThemeToggle';
 import DemoChat from '@/components/landing/DemoChat';
@@ -26,37 +25,30 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="relative pt-36 pb-24 px-6 text-center max-w-4xl mx-auto">
-        {/* Ambient orb */}
         <div className="hero-orb left-1/2 top-0 -translate-x-1/2 -translate-y-1/3 opacity-40 blur-[120px]" />
-
         <div className="relative z-10 space-y-12">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-card)] text-xs text-[var(--text-muted)] mb-8 animate-in fade-in duration-1000">
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
             Not therapy. Not journaling. Not advice.
           </div>
-
           <div className="space-y-4">
-            <h1 className="text-5xl sm:text-7xl lg:text-8xl font-bold text-[var(--text-primary)] leading-[1.05] tracking-tight mb-4 transition-all group">
+            <h1 className="text-5xl sm:text-7xl lg:text-7xl font-black text-[var(--text-primary)] leading-[0.95] tracking-tight mb-4 transition-all">
               “Patterns repeat until wisdom <br />
-              <span className="text-[var(--accent)] drop-shadow-[0_0_15px_var(--accent-glow)]">turns them into Rhyth”</span>
+              <span className="text-[var(--accent)] drop-shadow-[0_0_20px_var(--accent-glow)]">turns them into Rhythm”</span>
             </h1>
-            <RotatingTaglines />
+            <Typeflow />
           </div>
-
-          <Typeflow />
-
-          <div className="space-y-6">
+          <div className="pt-0 space-y-4">
             <Link
               id="get-started-cta"
               href="/onboarding"
-              className="inline-flex items-center gap-2 px-10 py-5 bg-[var(--accent)] rounded-2xl text-[16px] font-bold text-white hover:opacity-90 transition-all hover:scale-[1.02] shadow-[0_10px_30px_rgba(var(--accent-rgb),0.3)] group"
+              className="inline-flex items-center gap-2 px-12 py-6 bg-[var(--accent)] rounded-2xl text-[18px] font-black text-white hover:opacity-90 transition-all hover:scale-[1.05] shadow-[0_20px_40px_rgba(var(--accent-rgb),0.4)] group"
             >
               Start first reflection
               <span className="group-hover:translate-x-1 transition-transform">→</span>
             </Link>
-
             <div className="space-y-2">
-              <p className="text-[12px] text-[var(--text-muted)] font-medium tracking-wide">
+              <p className="text-[13px] text-[var(--text-muted)] font-semibold tracking-wide">
                 Most users recognize their first pattern within 3-5 minutes.
               </p>
             </div>
@@ -68,11 +60,9 @@ export default function LandingPage() {
       <section className="px-6 pb-24 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-500">
         <div className="p-10 rounded-[32px] bg-[var(--bg-card)] border border-[var(--border)] relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--accent)] opacity-[0.03] blur-[80px]" />
-
           <h2 className="text-2xl font-semibold text-[var(--text-primary)] mb-8 text-center sm:text-left">
             What changes when you see your pattern?
           </h2>
-
           <div className="grid sm:grid-cols-2 gap-6">
             {[
               "You notice burnout days before it hits",
@@ -93,7 +83,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Interactive Demo (Minimalist) */}
+      {/* Interactive Demo */}
       <section className="px-6 pb-28 max-w-lg mx-auto opacity-80 hover:opacity-100 transition-opacity">
         <p className="text-center text-[10px] text-[var(--text-muted)] uppercase tracking-[0.3em] mb-8 font-bold">
           Experience the reflection
@@ -121,10 +111,7 @@ export default function LandingPage() {
               body: 'Each session closes with a small personal mantra. Completion creates safety.',
             },
           ].map((card) => (
-            <div
-              key={card.title}
-              className="p-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] hover:border-[var(--border-active)] transition-colors"
-            >
+            <div key={card.title} className="p-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] hover:border-[var(--border-active)] transition-colors">
               <div className="text-[var(--accent)] text-xl mb-3">{card.icon}</div>
               <h3 className="font-medium text-[var(--text-primary)] mb-2 text-sm">{card.title}</h3>
               <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{card.body}</p>

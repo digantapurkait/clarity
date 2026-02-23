@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { t, languages } from '@/lib/i18n';
 import Link from 'next/link';
 import PatternDiscovery from '@/components/chat/PatternDiscovery';
+import PIIScoreIndicator from '@/components/chat/PIIScoreIndicator';
 import { useSession, signOut } from 'next-auth/react';
 
 interface Message {
@@ -17,6 +18,14 @@ interface Message {
     isIntervention?: boolean;
     suggestions?: string[];
 }
+
+const PHASE_OPTIONS: Record<string, string[]> = {
+    'ENTRY': ['Help me reflect', 'I feel overwhelmed', 'Just venting'],
+    'RECOGNITION': ['See my patterns', 'Why does this happen?', 'Is this normal?'],
+    'DEEPENING': ['Go deeper', 'Connect the dots', 'What am I missing?'],
+    'INSIGHT': ['Give me clarity', 'What should I do?', 'Reframe this'],
+    'CLOSURE': ['I am ready', 'Save this wisdom', 'End for today'],
+};
 
 export default function ChatPage() {
     const { data: session } = useSession();
@@ -33,6 +42,9 @@ export default function ChatPage() {
     const [showContrast, setShowContrast] = useState(false);
     const [inactivityTimer, setInactivityTimer] = useState<NodeJS.Timeout | null>(null);
     const [showRecovery, setShowRecovery] = useState(false);
+    const [curiosityHook, setCuriosityHook] = useState<string | null>(null);
+    const [phase, setPhase] = useState<string>('ENTRY');
+    const [curiosityClicked, setCuriosityClicked] = useState(false);
 
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -49,6 +61,10 @@ export default function ChatPage() {
         setLanguage(lang);
 
         const init = async () => {
+            // Check for trigger context from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const trigger = urlParams.get('trigger');
+
             // If user is logged in and was a guest, merge sessions
             if (session && guestId) {
                 await fetch('/api/auth/merge', {
@@ -60,6 +76,22 @@ export default function ChatPage() {
                 guestId = null;
             }
 
+            // Sync demo context if present
+            const demoContext = localStorage.getItem('mindmantra_demo_context');
+            if (demoContext) {
+                try {
+                    const parsed = JSON.parse(demoContext);
+                    await fetch('/api/chat/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ messages: parsed, guestId }),
+                    });
+                    localStorage.removeItem('mindmantra_demo_context');
+                } catch (e) {
+                    console.error('Demo sync error:', e);
+                }
+            }
+
             const chatRes = await fetch(`/api/chat${guestId ? `?guestId=${guestId}` : ''}`);
             const suggestRes = await fetch(`/api/suggestions?language=${lang}`);
 
@@ -69,6 +101,8 @@ export default function ChatPage() {
                     setMessages(data.messages.map((m: any) => ({
                         role: m.role,
                         content: m.content,
+                        isMantra: m.isMantra,
+                        isClarity: m.isClarity
                     })));
                     setSealed(data.session?.sealed || false);
                 } else {
@@ -79,6 +113,17 @@ export default function ChatPage() {
             if (suggestRes.ok) {
                 const s = await suggestRes.json();
                 setSuggestions(s.suggestions || []);
+            }
+
+            // Handle triggers
+            if (trigger === 'patterns') {
+                // The PatternDiscovery component handles its own state, 
+                // but we might want to "nudge" it or just let the user click.
+                // For now, it's enough that we synced and fetched messages.
+            } else if (trigger === 'clarity') {
+                // If it's a clarity check, we might want to auto-trigger it
+                // but usually user needs to have enough context.
+                // For now, we'll just let the messages render.
             }
 
             setInitialized(true);
@@ -231,6 +276,13 @@ export default function ChatPage() {
                     if (metadata.sealed && !session) {
                         setTimeout(() => setShowSignup(true), 2500);
                     }
+                    if (metadata.curiosityHook) {
+                        setCuriosityHook(metadata.curiosityHook);
+                        setCuriosityClicked(false);
+                    }
+                    if (metadata.phase) {
+                        setPhase(metadata.phase);
+                    }
                     resetInactivityTimer();
                 } catch (e) {
                     console.error('Failed to parse session metadata:', e);
@@ -247,6 +299,20 @@ export default function ChatPage() {
                 content: t('errorQuiet', language) || "Something went quiet. I'm still here — try again.",
             }]);
         }
+    };
+
+    const handleCuriosityClick = async () => {
+        if (!curiosityHook) return;
+        setCuriosityClicked(true);
+        const guestId = localStorage.getItem('guest_id');
+
+        await fetch('/api/user/curiosity', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hook: curiosityHook, guestId })
+        });
+
+        send(`Tell me more about: ${curiosityHook}`);
     };
 
     const handleRetry = () => {
@@ -306,6 +372,7 @@ export default function ChatPage() {
                 </div>
 
                 <div className="flex items-center gap-6">
+                    <PIIScoreIndicator userId={userId} />
                     <PatternDiscovery userId={userId} />
 
                     <div className="flex items-center gap-3">
@@ -492,17 +559,36 @@ export default function ChatPage() {
 
                 {!sealed && !showSignup && (
                     <div className="pb-6 pt-2 space-y-3 bg-[var(--bg-deep)]">
-                        {/* Option Buttons Engine Sample */}
-                        {!loading && !typing && messages.length > 2 && (
-                            <div className="flex justify-center gap-2 animate-in fade-in slide-in-from-bottom-2">
-                                <button onClick={() => send('Stuck in mind')} className="px-3 py-1.5 rounded-full border border-[var(--border)] text-[11px] bg-[var(--bg-card)] hover:border-[var(--accent)] transition-all">Stuck in mind</button>
-                                <button onClick={() => send('Too many tasks')} className="px-3 py-1.5 rounded-full border border-[var(--border)] text-[11px] bg-[var(--bg-card)] hover:border-[var(--accent)] transition-all">Too many tasks</button>
-                                <button onClick={() => send('Both')} className="px-3 py-1.5 rounded-full border border-[var(--border)] text-[11px] bg-[var(--bg-card)] hover:border-[var(--accent)] transition-all">Both</button>
+                        {/* Curiosity Hook (Insight Teaser) */}
+                        {curiosityHook && !curiosityClicked && (
+                            <div className="flex justify-center animate-in fade-in slide-in-from-bottom-4">
+                                <button
+                                    onClick={handleCuriosityClick}
+                                    className="px-4 py-2 bg-[rgba(251,191,36,0.1)] border border-[rgba(251,191,36,0.3)] rounded-full text-[11px] text-[var(--accent)] font-medium flex items-center gap-2 hover:bg-[rgba(251,191,36,0.2)] transition-all shadow-[0_0_15px_rgba(251,191,36,0.1)]"
+                                >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-ping" />
+                                    {curiosityHook}
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Dynamic Intent Options */}
+                        {!loading && !typing && messages.length >= 2 && (
+                            <div className="flex justify-center flex-wrap gap-2 animate-in fade-in slide-in-from-bottom-2">
+                                {(PHASE_OPTIONS[phase] || PHASE_OPTIONS['ENTRY']).map(opt => (
+                                    <button
+                                        key={opt}
+                                        onClick={() => send(opt)}
+                                        className="px-3 py-1.5 rounded-full border border-[var(--border)] text-[10px] uppercase tracking-wider text-[var(--text-muted)] bg-[var(--bg-card)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all"
+                                    >
+                                        {opt}
+                                    </button>
+                                ))}
                             </div>
                         )}
 
                         {suggestions.length > 0 && messages.length <= 1 && (
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-2 justify-center">
                                 {suggestions.map((s) => (
                                     <button
                                         key={s}

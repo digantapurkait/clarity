@@ -10,18 +10,26 @@ interface Pattern {
     pattern_type: string;
 }
 
+interface Diagnostics {
+    energy: number;
+    load: number;
+}
+
 export default function PatternDiscovery({ userId }: { userId: number | null }) {
     const [pattern, setPattern] = useState<Pattern | null>(null);
+    const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
     const [showModal, setShowModal] = useState(false);
     const [isPremium, setIsPremium] = useState(false);
 
     useEffect(() => {
         const checkPatterns = async () => {
-            const res = await fetch('/api/patterns/latest');
+            const guestId = localStorage.getItem('guest_id');
+            const res = await fetch(`/api/patterns/latest${guestId ? `?guestId=${guestId}` : ''}`);
             if (res.ok) {
                 const data = await res.json();
                 if (data.pattern) {
                     setPattern(data.pattern);
+                    setDiagnostics(data.diagnostics);
                     setIsPremium(data.subscription_status === 'premium');
                 }
             }
@@ -59,11 +67,45 @@ export default function PatternDiscovery({ userId }: { userId: number | null }) 
                         <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--accent)] opacity-5 blur-[60px]" />
 
                         <div className="space-y-2">
-                            <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--accent)] font-bold">Mental Blueprint Detected</span>
-                            <h3 className="text-xl font-semibold text-[var(--text-primary)]">There's something forming beneath your thoughts.</h3>
+                            <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--accent)] font-bold">
+                                {pattern.pattern_type === 'initial_reflection' ? 'Your Starting Reflection' : 'Mental Blueprint Detected'}
+                            </span>
+                            <h3 className="text-xl font-semibold text-[var(--text-primary)]">
+                                {pattern.pattern_type === 'initial_reflection'
+                                    ? "Here's the snapshot from your first check-in."
+                                    : "There's something forming beneath your thoughts."}
+                            </h3>
                         </div>
 
                         <div className="p-5 rounded-2xl bg-[var(--bg-deep)] border border-[var(--border)] space-y-4">
+                            {/* Diagnostic HUD */}
+                            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-white/5">
+                                <div className="space-y-1.5">
+                                    <div className="flex justify-between items-end">
+                                        <span className="text-[9px] text-[var(--text-muted)] uppercase tracking-widest">Energy</span>
+                                        <span className="text-[10px] text-[var(--text-primary)] font-mono">{diagnostics?.energy.toFixed(1) || '5.0'}</span>
+                                    </div>
+                                    <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-emerald-500 transition-all duration-1000"
+                                            style={{ width: `${(diagnostics?.energy || 5) * 10}%` }}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <div className="flex justify-between items-end">
+                                        <span className="text-[9px] text-[var(--text-muted)] uppercase tracking-widest">Cognitive Load</span>
+                                        <span className="text-[10px] text-[var(--text-primary)] font-mono">{((diagnostics?.load || 0.5) * 100).toFixed(0)}%</span>
+                                    </div>
+                                    <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-amber-500 transition-all duration-1000"
+                                            style={{ width: `${(diagnostics?.load || 0.5) * 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="space-y-1">
                                 <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">Observed Pattern</span>
                                 <p className="text-[var(--text-primary)] text-sm">{pattern.summary_text}</p>

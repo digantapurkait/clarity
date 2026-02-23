@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 
 interface SequenceItem {
-    type: 'type' | 'pause' | 'erase' | 'boom';
+    type: 'type' | 'pause' | 'erase';
     text?: string;
     duration?: number;
 }
@@ -33,7 +33,6 @@ const SEQUENCE: SequenceItem[] = [
 export default function Typeflow() {
     const [index, setIndex] = useState(0);
     const [display, setDisplay] = useState('');
-    const [isBoom, setIsBoom] = useState(false);
 
     useEffect(() => {
         const item = SEQUENCE[index];
@@ -44,7 +43,7 @@ export default function Typeflow() {
             if (display.length < target.length) {
                 timer = setTimeout(() => {
                     setDisplay(target.slice(0, display.length + 1));
-                }, 40);
+                }, 45);
             } else {
                 setIndex((prev) => (prev + 1) % SEQUENCE.length);
             }
@@ -56,17 +55,10 @@ export default function Typeflow() {
             if (display.length > 0) {
                 timer = setTimeout(() => {
                     setDisplay(display.slice(0, -1));
-                }, 20);
+                }, 25);
             } else {
                 setIndex((prev) => (prev + 1) % SEQUENCE.length);
             }
-        } else if (item.type === 'boom') {
-            setIsBoom(true);
-            setDisplay(display + (item.text || ''));
-            timer = setTimeout(() => {
-                setIsBoom(false);
-                setIndex((prev) => (prev + 1) % SEQUENCE.length);
-            }, 1000);
         }
 
         return () => clearTimeout(timer);
@@ -74,7 +66,7 @@ export default function Typeflow() {
 
     return (
         <div className="min-h-[4rem] text-lg text-[var(--text-secondary)] leading-relaxed max-w-xl mx-auto mb-12 flex flex-col items-center justify-center text-center">
-            <p className={`${isBoom ? 'text-[var(--accent)] font-bold scale-110 transition-all duration-300' : ''}`}>
+            <p>
                 {display}
                 <span className="typewriter-cursor">|</span>
             </p>

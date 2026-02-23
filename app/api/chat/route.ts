@@ -50,16 +50,29 @@ export async function POST(req: NextRequest) {
         }
 
         // Initialize or fetch session
-        const sessionResults = await query<Session[]>(
-            `SELECT id, phase, emotional_depth_score, clarity_signal, resistance_level,
-                (SELECT COUNT(*) FROM messages WHERE session_id = s.id) as message_count
+        const sessionResults = await query<any[]>(
+            `SELECT s.id, s.phase, s.emotional_depth_score, s.clarity_signal, s.resistance_level,
+                (SELECT COUNT(*) FROM messages WHERE session_id = s.id) as message_count,
+                (SELECT MAX(created_at) FROM messages WHERE session_id = s.id) as last_activity,
+                s.started_at
              FROM sessions s
-             WHERE (user_id = ? OR guest_id = ?) AND phase != 'SEALED'
-             ORDER BY started_at DESC LIMIT 1`,
+             WHERE (s.user_id = ? OR s.guest_id = ?) AND s.phase != 'SEALED'
+             ORDER BY s.started_at DESC LIMIT 1`,
             [userId, guestId]
         );
 
         let session = Array.isArray(sessionResults) && sessionResults.length > 0 ? sessionResults[0] : null;
+
+        // 10-minute Inactivity Check
+        if (session) {
+            const lastActivity = session.last_activity || session.started_at;
+            const inactivityLimit = 10 * 60 * 1000; // 10 minutes
+            if (Date.now() - new Date(lastActivity).getTime() > inactivityLimit) {
+                // Seal old session and force new one
+                await query("UPDATE sessions SET phase = 'SEALED', sealed_at = NOW() WHERE id = ?", [session.id]);
+                session = null;
+            }
+        }
 
         if (!session) {
             const insertResult = await query<{ insertId: number }>(
@@ -226,41 +239,59 @@ export async function POST(req: NextRequest) {
                             }
 
                             if (userId) {
-                                const transcript = (Array.isArray(history) ? history : [] as DBMessage[])
+                                const fullTranscript = (Array.isArray(history) ? history : [] as DBMessage[])
                                     .map((m: DBMessage) => `${m.role === 'user' ? 'User' : 'MindMantra'}: ${m.content}`)
                                     .join('\n');
                                 updateUserProfile(userId, tags.mood, tags.topic).catch(console.error);
                                 import('@/lib/memory').then(({ updateRelationshipSummary }) => {
-                                    updateRelationshipSummary(userId, transcript).catch(console.error);
+                                    updateRelationshipSummary(userId, fullTranscript).catch(console.error);
                                 });
                             }
                         } else if (userId) {
                             await updateUserProfile(userId, tags.mood, tags.topic);
                         }
+
+                        // Generate Generic Contrast Response (non-streaming for metadata)
+                        let genericReply = "I'm sorry, I couldn't generate a generic contrast right now.";
+                        try {
+                            const genericPrompt = `Provide a standard, helpful, but surface-level AI assistant response to the user's last message. Do NOT apply any pattern intelligence or deep emotional reflection.
+                        Message: "${message}"`;
+                            const genericRes = await chat(genericPrompt, []);
+                            genericReply = genericRes;
+                        } catch (e) {
+                            console.error('Generic reply generation failed:', e);
+                        }
+
+                        // Generate Curiosity Hook if clarity is high
+                        let curiosityHook = null;
+                        if (tags.clarity_signal > 0.6 || tags.emotional_depth_score > 0.7) {
+                            try {
+                                const hookPrompt = `You are a pattern-intelligence system. Generate a short (max 10 words) "Curiosity Hook" for the user. 
+                            It should be a teaser for a deeper insight you're starting to see about their patterns. 
+                            Make it sound like a "bridge" to something they haven't seen yet. 
+                            Current Pattern Snapshot: "${tags.topic} - ${tags.mood}"
+                            Transcript: "${transcript.slice(-500)}"
+                            Example: "There's a rhythm to how you avoid the big topics..."
+                            Example: "I'm noticing a link between your energy and how you speak about work..."`;
+                                curiosityHook = await chat(hookPrompt, []);
+                            } catch (e) {
+                                console.error('Curiosity hook generation failed:', e);
+                            }
+                        }
+
+                        // Final metadata chunk
+                        const metadata = {
+                            phase: nextPhase,
+                            sealed: nextPhase === 'SEALED',
+                            paceMs: PHASE_DELAY_MS[currentPhase],
+                            mantra: currentPhase === 'CLOSURE' ? mantra : null,
+                            genericReply: genericReply,
+                            curiosityHook: curiosityHook
+                        };
+                        controller.enqueue(encoder.encode(`\n\n__METADATA__${JSON.stringify(metadata)}`));
                     } catch (e) {
                         console.error('Processing background tasks failed:', e);
                     }
-
-                    // Generate Generic Contrast Response (non-streaming for metadata)
-                    let genericReply = "I'm sorry, I couldn't generate a generic contrast right now.";
-                    try {
-                        const genericPrompt = `Provide a standard, helpful, but surface-level AI assistant response to the user's last message. Do NOT apply any pattern intelligence or deep emotional reflection.
-                        Message: "${message}"`;
-                        const genericRes = await chat(genericPrompt, []);
-                        genericReply = genericRes;
-                    } catch (e) {
-                        console.error('Generic reply generation failed:', e);
-                    }
-
-                    // Final metadata chunk
-                    const metadata = {
-                        phase: nextPhase,
-                        sealed: nextPhase === 'SEALED',
-                        paceMs: PHASE_DELAY_MS[currentPhase],
-                        mantra: currentPhase === 'CLOSURE' ? mantra : null,
-                        genericReply: genericReply
-                    };
-                    controller.enqueue(encoder.encode(`\n\n__METADATA__${JSON.stringify(metadata)}`));
                 } catch (e: any) {
                     console.error('Streaming error:', e);
                     controller.error(e);

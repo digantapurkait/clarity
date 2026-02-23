@@ -34,11 +34,41 @@ export async function GET(req: NextRequest) {
             [userId, guestId]
         );
 
-        const pattern = Array.isArray(patterns) && patterns.length > 0 ? patterns[0] : null;
+        let pattern = Array.isArray(patterns) && patterns.length > 0 ? patterns[0] : null;
+
+        // Fallback to latest Onboarding/Session summary if no clustered pattern exists
+        if (!pattern) {
+            const sessions = await query<any[]>(
+                `SELECT session_summary as summary_text, 'initial_reflection' as pattern_type
+                 FROM sessions 
+                 WHERE (user_id = ? OR guest_id = ?) AND session_summary IS NOT NULL
+                 ORDER BY started_at DESC LIMIT 1`,
+                [userId, guestId]
+            );
+            if (Array.isArray(sessions) && sessions.length > 0) {
+                pattern = {
+                    ...sessions[0],
+                    prevention_suggestion: "This is your starting point. As we talk more, I'll begin to see the deeper structures behind these thoughts."
+                };
+            }
+        }
+
+        // Fetch recent diagnostic averages
+        const diagnostics = await query<any[]>(
+            `SELECT AVG(energy_level) as avg_energy, AVG(cognitive_load_score) as avg_load
+             FROM emotional_events
+             WHERE (user_id = ? OR guest_id = ?) AND timestamp > DATE_SUB(NOW(), INTERVAL 24 HOUR)`,
+            [userId, guestId]
+        );
+        const stats = Array.isArray(diagnostics) && diagnostics.length > 0 ? diagnostics[0] : { avg_energy: 5, avg_load: 0.5 };
 
         return NextResponse.json({
             pattern,
-            subscription_status: subscriptionStatus
+            subscription_status: subscriptionStatus,
+            diagnostics: {
+                energy: stats.avg_energy || 5,
+                load: stats.avg_load || 0.5
+            }
         });
 
     } catch (error: any) {
