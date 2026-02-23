@@ -7,8 +7,13 @@ const resend = new Resend(process.env.RESEND_API_KEY);
  */
 export async function sendEmailOtp(email: string, code: string): Promise<boolean> {
     try {
+        if (!process.env.RESEND_API_KEY) {
+            console.error('[RESEND_ERROR] RESEND_API_KEY is missing');
+            return false;
+        }
+
         const { data, error } = await resend.emails.send({
-            from: process.env.EMAIL_FROM || 'MindMantra <onboarding@resend.dev>',
+            from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
             to: [email],
             subject: 'Your MindMantra Access Code',
             html: `
@@ -24,13 +29,14 @@ export async function sendEmailOtp(email: string, code: string): Promise<boolean
         });
 
         if (error) {
-            console.error('[RESEND_ERROR]', error);
+            console.error('[RESEND_ERROR] Failed to send email:', JSON.stringify(error, null, 2));
             return false;
         }
 
-        return !!data;
-    } catch (err) {
-        console.error('[RESEND_EXCEPTION]', err);
+        console.log(`[RESEND_SUCCESS] Code sent to ${email}`);
+        return true;
+    } catch (err: any) {
+        console.error('[RESEND_EXCEPTION]', err.message);
         return false;
     }
 }
