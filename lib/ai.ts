@@ -1,10 +1,28 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import OpenAI from "openai";
+import { browseUrl } from "./browser";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY || "");
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY || "",
 });
+
+const BROWSER_TOOL: any = {
+    functionDeclarations: [{
+        name: "browse_url",
+        description: "Fetch and read the text content of a URL to research information or summarize a link.",
+        parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+                url: {
+                    type: SchemaType.STRING,
+                    description: "The full URL to browse (e.g., https://example.com/article)",
+                },
+            },
+            required: ["url"],
+        },
+    }],
+};
 
 /**
  * AI Interface for MindMantra
@@ -30,7 +48,8 @@ export async function chat(
             console.log(`[AI] Attempting ${modelName}...`);
             const model = genAI.getGenerativeModel({
                 model: modelName,
-                systemInstruction: systemPrompt
+                systemInstruction: systemPrompt,
+                tools: [BROWSER_TOOL],
             });
 
             const chatSession = model.startChat({
@@ -41,8 +60,25 @@ export async function chat(
             });
 
             const lastMessage = messages[messages.length - 1]?.content || "";
-            const result = await chatSession.sendMessage(lastMessage);
-            const text = result.response.text().trim();
+            let result = await chatSession.sendMessage(lastMessage);
+            let text = result.response.text().trim();
+
+            // Handle potential tool calls (first level)
+            const call = result.response.functionCalls()?.[0];
+            if (call && call.name === "browse_url") {
+                const url = (call.args as any).url;
+                console.log(`[AI_TOOL] Model requested to browse: ${url}`);
+                const browseResult = await browseUrl(url);
+
+                // Send tool result back to model
+                result = await chatSession.sendMessage([{
+                    functionResponse: {
+                        name: "browse_url",
+                        response: { content: browseResult }
+                    }
+                }]);
+                text = result.response.text().trim();
+            }
 
             if (!text) throw new Error("Empty response from model");
             return text;
@@ -100,7 +136,8 @@ export async function chatStream(
             console.log(`[AI] Attempting ${modelName} stream...`);
             const model = genAI.getGenerativeModel({
                 model: modelName,
-                systemInstruction: systemPrompt
+                systemInstruction: systemPrompt,
+                tools: [BROWSER_TOOL],
             });
 
             const chatSession = model.startChat({
@@ -112,6 +149,27 @@ export async function chatStream(
 
             const lastMessage = messages[messages.length - 1]?.content || "";
             const result = await chatSession.sendMessageStream(lastMessage);
+
+            // Peek at the tool call before returning the stream
+            const response = await result.response;
+            const calls = response.functionCalls();
+
+            if (calls && calls.length > 0) {
+                const call = calls[0];
+                if (call.name === "browse_url") {
+                    const url = (call.args as any).url;
+                    console.log(`[AI_TOOL_STREAM] Model requested to browse: ${url}`);
+                    const browseResult = await browseUrl(url);
+
+                    const nextResult = await chatSession.sendMessageStream([{
+                        functionResponse: {
+                            name: "browse_url",
+                            response: { content: browseResult }
+                        }
+                    }]);
+                    return nextResult.stream;
+                }
+            }
 
             return result.stream;
         } catch (e: any) {
