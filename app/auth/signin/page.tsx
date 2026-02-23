@@ -62,10 +62,11 @@ export default function SignInPage() {
             if (data.status === 'bypass') {
                 // Trust bypass: Sign in immediately
                 await signIn('credentials', { userId: data.userId, callbackUrl: '/app/chat' });
-            } else if (data.status === 'pending_email' || data.status === 'pending_sms') {
+            } else if (data.status === 'pending_email' || data.status === 'pending_sms' || data.status === 'pending_fallback') {
                 setUserId(data.userId);
                 setStep('verify');
                 setCountdown(data.retryAfter || 60);
+                if (data.error) setError(data.error); // Show "Primary delivery delayed" warning
             } else {
                 setError(data.error || 'Failed to request code');
             }
