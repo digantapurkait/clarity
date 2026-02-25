@@ -10,23 +10,11 @@ interface SequenceItem {
 }
 
 const SEQUENCE: SequenceItem[] = [
-    { type: 'type', text: "You’ve been trying to fix symptoms…" },
-    { type: 'pause', duration: 1000 },
-    { type: 'type', text: "but the real structure stayed invisible." },
-    { type: 'pause', duration: 2000 },
-    { type: 'erase' },
-    { type: 'type', text: "You don’t feel stuck randomly." },
-    { type: 'pause', duration: 800 },
-    { type: 'type', text: "You repeat invisible patterns." },
-    { type: 'pause', duration: 2000 },
-    { type: 'erase' },
-    { type: 'type', text: "Nothing changes…" },
-    { type: 'pause', duration: 1000 },
-    { type: 'type', text: "until you see what’s been repeating." },
-    { type: 'pause', duration: 2000 },
-    { type: 'erase' },
-    { type: 'type', text: "You’re not stuck. You’re repeating a pattern you haven’t seen yet." },
+    { type: 'type', text: "MindMantra doesn't give advice. It listens, remembers, and reflects — until you start to see yourself more clearly." },
     { type: 'pause', duration: 3000 },
+    { type: 'erase' },
+    { type: 'type', text: "Talk for 2 minutes. Leave with clarity." },
+    { type: 'pause', duration: 4000 },
     { type: 'erase' },
 ];
 

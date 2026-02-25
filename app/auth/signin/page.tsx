@@ -7,7 +7,8 @@ import Link from 'next/link';
 export default function SignInPage() {
     const [identifier, setIdentifier] = useState('');
     const [type, setType] = useState<'email' | 'phone'>('email');
-    const [step, setStep] = useState<'request' | 'verify'>('request');
+    const [step, setStep] = useState<'request' | 'verify' | 'link_email'>('request');
+    const [notice, setNotice] = useState('');
     const [code, setCode] = useState('');
     const [userId, setUserId] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
@@ -44,6 +45,7 @@ export default function SignInPage() {
         if (!identifier.trim()) return;
         setLoading(true);
         setError('');
+        setNotice('');
 
         try {
             const res = await fetch('/api/auth/otp/request', {
@@ -60,18 +62,59 @@ export default function SignInPage() {
             const data = await res.json();
 
             if (data.status === 'bypass') {
-                // Trust bypass: Sign in immediately
                 await signIn('credentials', { userId: data.userId, callbackUrl: '/chat' });
+            } else if (data.status === 'require_email') {
+                setUserId(data.userId);
+                setStep('link_email');
+                setNotice(data.notice || 'Mobile based OTP coming soon.');
             } else if (data.status === 'pending_email' || data.status === 'pending_sms' || data.status === 'pending_fallback') {
                 setUserId(data.userId);
                 setStep('verify');
                 setCountdown(data.retryAfter || 60);
-                if (data.error) setError(data.error); // Show "Primary delivery delayed" warning
+                if (data.notice) setNotice(data.notice);
+                if (data.error) setError(data.error);
             } else {
                 setError(data.error || 'Failed to request code');
             }
         } catch (err) {
             setError('Connection error. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleLinkEmail = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const email = (e.currentTarget as any).email.value;
+        if (!email || !userId) return;
+        setLoading(true);
+        setError('');
+
+        try {
+            const res = await fetch('/api/auth/otp/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email,
+                    userId,
+                    deviceHash,
+                    browserInfo: navigator.userAgent
+                }),
+            });
+
+            const data = await res.json();
+
+            if (data.status === 'bypass') {
+                await signIn('credentials', { userId: data.userId, callbackUrl: '/chat' });
+            } else if (data.status === 'pending_email') {
+                setUserId(data.userId);
+                setStep('verify');
+                setCountdown(data.retryAfter || 60);
+            } else {
+                setError(data.error || 'Failed to link email');
+            }
+        } catch (err) {
+            setError('Connection error.');
         } finally {
             setLoading(false);
         }
@@ -166,7 +209,7 @@ export default function SignInPage() {
                                 onChange={(e) => setIdentifier(e.target.value)}
                                 placeholder={type === 'email' ? 'your@email.com' : '+1 234 567 890'}
                                 required
-                                className="input-glow w-full bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-primary)] text-sm"
+                                className="input-glow w-full bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-primary)] text-sm outline-none"
                             />
                             {error && <p className="text-xs text-red-400 text-center">{error}</p>}
                             <button
@@ -178,12 +221,41 @@ export default function SignInPage() {
                             </button>
                         </form>
                     </>
+                ) : step === 'link_email' ? (
+                    <div className="text-center space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="w-14 h-14 mx-auto rounded-full bg-[var(--accent-soft)] flex items-center justify-center text-2xl">📧</div>
+                        <div>
+                            <h2 className="text-xl font-semibold text-[var(--text-primary)]">Email Required</h2>
+                            {notice && <p className="text-sm text-[var(--accent)] mt-2 font-medium">{notice}</p>}
+                        </div>
+
+                        <form onSubmit={handleLinkEmail} className="space-y-4 text-left">
+                            <label className="text-xs text-[var(--text-muted)] ml-1">Please enter your email to receive the code:</label>
+                            <input
+                                type="email"
+                                name="email"
+                                required
+                                placeholder="your@email.com"
+                                className="input-glow w-full bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-primary)] text-sm outline-none"
+                            />
+                            {error && <p className="text-xs text-red-400">{error}</p>}
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full py-3 bg-[var(--accent)] rounded-xl text-sm font-medium disabled:opacity-50"
+                            >
+                                {loading ? 'Sending Code...' : 'Send OTP to Email →'}
+                            </button>
+                        </form>
+                        <button onClick={() => setStep('request')} className="text-xs text-[var(--text-muted)] hover:underline">← Back</button>
+                    </div>
                 ) : (
                     <div className="text-center space-y-6">
                         <div className="w-14 h-14 mx-auto rounded-full bg-[var(--accent-soft)] flex items-center justify-center text-2xl">🗝️</div>
                         <div>
                             <h2 className="text-xl font-semibold text-[var(--text-primary)]">Enter Code</h2>
-                            <p className="text-sm text-[var(--text-secondary)] mt-1">We sent a 6-digit code to your {type}.</p>
+                            <p className="text-sm text-[var(--text-secondary)] mt-1">We sent a 6-digit code to your {type === 'phone' ? 'linked email' : 'email'}.</p>
+                            {notice && <p className="text-[10px] text-[var(--accent)] mt-2 uppercase tracking-widest font-bold">{notice}</p>}
                         </div>
 
                         <form onSubmit={handleVerify} className="space-y-4">
@@ -193,7 +265,7 @@ export default function SignInPage() {
                                 value={code}
                                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
                                 placeholder="000000"
-                                className="w-full text-center text-2xl tracking-[10px] bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-primary)] font-bold"
+                                className="w-full text-center text-2xl tracking-[10px] bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-primary)] font-bold outline-none"
                             />
                             {error && <p className="text-xs text-red-400">{error}</p>}
                             <button

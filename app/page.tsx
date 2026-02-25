@@ -25,7 +25,7 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section className="relative pt-16 pb-24 px-6 text-center max-w-4xl mx-auto">
+      <section className="relative pt-44 pb-24 px-6 text-center max-w-4xl mx-auto">
         <div className="hero-orb left-1/2 top-0 -translate-x-1/2 -translate-y-1/3 opacity-40 blur-[120px]" />
         <div className="relative z-10 space-y-12">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-card)] text-xs text-[var(--text-muted)] mb-8 animate-in fade-in duration-1000">
@@ -33,9 +33,9 @@ export default function LandingPage() {
             Not therapy. Not journaling. Not advice.
           </div>
           <div className="space-y-4">
-            <h1 className="text-5xl sm:text-7xl lg:text-7xl font-black text-[var(--text-primary)] leading-[0.95] tracking-tight mb-4 transition-all">
-              “Patterns repeat until wisdom <br />
-              <span className="text-[var(--accent)] drop-shadow-[0_0_20px_var(--accent-glow)]">turns them into Rhythm”</span>
+            <h1 className="text-4xl sm:text-6xl lg:text-6xl font-black text-[var(--text-primary)] leading-[1.1] tracking-tight mb-4 transition-all">
+              “The most powerful companion <br />
+              <span className="text-[var(--accent)]">in today’s world.”</span>
             </h1>
             <Typeflow />
           </div>

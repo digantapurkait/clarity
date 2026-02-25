@@ -58,17 +58,23 @@ export default function LandingReflection() {
     return (
         <form onSubmit={handleSubmit} className="relative z-10 w-full max-w-lg mx-auto space-y-4 flex flex-col items-center">
             <div className="relative w-full group">
-                <input
-                    type="text"
+                <textarea
+                    rows={2}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSubmit(e as any);
+                        }
+                    }}
                     placeholder="Tell me one thing on your mind..."
-                    className="w-full px-8 py-6 bg-[var(--bg-card)] border border-[var(--border)] rounded-[24px] text-lg text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[rgba(var(--accent-rgb),0.1)] transition-all outline-none shadow-xl"
+                    className="w-full pl-6 pr-44 py-5 bg-[var(--bg-card)] border border-[var(--border)] rounded-[24px] text-base sm:text-lg text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[rgba(var(--accent-rgb),0.1)] transition-all outline-none shadow-xl resize-none leading-relaxed overflow-y-auto break-words"
                 />
                 <button
                     type="submit"
                     disabled={!input.trim()}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-auto px-6 py-3 bg-gradient-to-br from-[#A78BFA] to-[var(--accent)] rounded-2xl flex items-center justify-center text-white text-sm font-bold hover:scale-105 transition-all disabled:opacity-0 disabled:scale-90"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-auto px-4 py-2.5 bg-gradient-to-br from-[#A78BFA] to-[var(--accent)] rounded-xl flex items-center justify-center text-white text-[12px] font-bold hover:scale-105 transition-all disabled:opacity-0 disabled:scale-95 shadow-lg z-20 whitespace-nowrap"
                 >
                     Start reflection →
                 </button>
