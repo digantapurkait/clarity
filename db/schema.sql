@@ -233,14 +233,26 @@ CREATE TABLE IF NOT EXISTS weekly_insights (
 );
 
 -- ─────────────────────────────────────────────
--- FOUNDER NOTES (manual memory injection)
+-- UNIFIED EXPERIENCE & METRICS
 -- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS founder_notes (
-  id             INT PRIMARY KEY AUTO_INCREMENT,
-  user_id        INT NOT NULL,
-  note           TEXT NOT NULL,
-  scheduled_for  DATE NOT NULL,
-  used           BOOLEAN DEFAULT FALSE,
-  created_at     DATETIME DEFAULT NOW(),
+CREATE TABLE IF NOT EXISTS user_metrics (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NULL,
+  guest_id VARCHAR(255) NULL,
+  reflection_count INT DEFAULT 0,
+  chat_session_count INT DEFAULT 0,
+  curiosity_click_count INT DEFAULT 0,
+  option_click_count INT DEFAULT 0,
+  last_activity_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  pattern_clarity_score FLOAT DEFAULT 0.05,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS pattern_clusters_ext (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  cluster_id INT NOT NULL,
+  longitudinal_signal VARCHAR(255),
+  recurrence_interval_days INT,
+  last_depth_score FLOAT,
+  FOREIGN KEY (cluster_id) REFERENCES pattern_clusters(id) ON DELETE CASCADE
 );

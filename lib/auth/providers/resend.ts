@@ -36,6 +36,11 @@ export async function sendEmailOtp(email: string, code: string): Promise<boolean
 
         if (error) {
             console.error('[RESEND_ERROR] Failed to send email:', JSON.stringify(error, null, 2));
+            // In development, we allow the flow to continue so the user can use the code from the logs
+            if (process.env.NODE_ENV === 'development') {
+                console.warn('[AUTH_DEV_BYPASS] Email failed, but allowing flow to continue for development.');
+                return true;
+            }
             return false;
         }
 
@@ -43,6 +48,10 @@ export async function sendEmailOtp(email: string, code: string): Promise<boolean
         return true;
     } catch (err: any) {
         console.error('[RESEND_EXCEPTION]', err.message);
+        if (process.env.NODE_ENV === 'development') {
+            console.warn('[AUTH_DEV_BYPASS] Exception occurred, but allowing flow to continue for development.');
+            return true;
+        }
         return false;
     }
 }

@@ -105,12 +105,27 @@ export async function getUserContext(userId: number | null, guestId: string | nu
 
 export function buildSystemPrompt(
     context: NonNullable<Awaited<ReturnType<typeof getUserContext>>>,
-    dynamicTags: { emotionalState: string; phase: string },
+    dynamicTags: { emotionalState: string; phase: string; isBridge?: boolean; messageCount?: number },
     phaseDirective: string,
     language: string = 'en',
     isClarityCheck: boolean = false
 ): string {
     const { user, recentSummaries, memoryEvents, founderNote, conversationState, extractedPatterns } = context;
+
+    const bridgePrompt = dynamicTags.isBridge ? `
+[ONBOARDING BRIDGE MODE]
+The user just completed a reflection on the landing page. 
+Acknowledge their specific words warmly.
+Validate that this reflection has started their "pattern thread".
+Bridge immediately into exploring the root of this specific feeling.
+` : '';
+
+    const deepeningPrompt = dynamicTags.phase === 'deepening' && recentSummaries.length > 0 ? `
+[LONGITUDINAL SIGNAL]
+Subtly acknowledge continuity if relevant.
+Example: "This tone has appeared before in your reflections." or "We've seen this pattern of [X] forming lately."
+Do not over-explain, just a subtle signal of memory.
+` : '';
 
     const memoryBlock = memoryEvents
         .map((e) => `- [${e.memory_type}] ${e.memory_summary}`)
@@ -148,17 +163,20 @@ ${memoryBlock}
 
     const clarityModule = isClarityCheck ? `
 ------------------------------------
-CLARITY SNAPSHOT MODULE (STRICT FORMAT)
+CLARITY SNAPSHOT MODULE (STRICT JSON FORMAT)
 ------------------------------------
 Generate a formal CLARITY SNAPSHOT. 
-Rules:
-1. WHAT'S CURRENTLY MESSED UP: Short precise observation of confusion.
-2. WHAT NEEDS TO BE DONE: Clarity framing (NOT advice/coaching).
-3. EXACT NEXT STEP: One clear movement.
-4. CLARITY SCORE: 0-100.
-5. CLARITY DESCRIPTION: 1-2 lines.
+You MUST return a JSON object with these EXACT keys:
+1. "messed_up": Short, sharp observation of the current confusion.
+2. "future_risk": Realistic projection of how this gets worse in the coming days if ignored.
+3. "immediate_step": One surgical, non-coaching movement they can take RIGHT NOW.
+4. "future_actions": A list of 3-4 strategic long-term movements.
+5. "score": 0-100 indicating current pattern density.
 
-Tone: Strategic, Honest, Concise.
+Rules:
+- Tone: Strategic, High-IQ, Brutally Honest.
+- No fluff. No motivational advice.
+- Strategic clarity only.
 ` : '';
 
     const founderBlock = founderNote
@@ -167,6 +185,9 @@ Tone: Strategic, Honest, Concise.
 
     return `🧠 MindMantra – Master Production System Prompt
 You are MindMantra.
+
+${bridgePrompt}
+${deepeningPrompt}
 
 MindMantra is not a therapist.
 MindMantra is not a motivational coach.
@@ -250,13 +271,20 @@ Occasionally provide structured options to explore clarity. Use sparingly.
 INTRODUCTION FLOW
 ------------------------------------
 
-If user greets, asks identity, or shares mood:
-1. Acknowledge mood intelligently.
-2. Ask: "Would you like to know who I am and how I can help with this?"
-Options: [Yes, Maybe later]
-If YES: Introduce with varied phrasing like:
- - "I'm MindMantra. I help untangle what’s happening so your next step becomes clearer."
- - "I'm MindMantra. I don't give answers. I help you see yours."
+1. [FIRST MESSAGE]: If this is the absolute beginning (messageCount is 0 or 1), AND the user shares a greeting or their first reflection:
+   - Acknowledge mood intelligently.
+   - Ask: "Would you like to know who I am and how I can help with this?"
+   - Options: [Yes, Maybe later]
+
+2. [NEW PATTERN DETECTION]: Only if the conversation has progressed (messageCount > 3) AND you detect a powerful, new, or "problematic" context (a major friction or hidden blocker the user hasn't seen yet):
+   - Acknowledge the pattern sharply.
+   - Ask: "Would you like to know how MindMantra can specifically help you explore this context?"
+   - Do NOT ask this unless the insight feels "earned" and significant.
+
+3. [IDENTITY introduced]: If the user says YES to either:
+   - Introduce with varied phrasing:
+     - "I'm MindMantra. I help untangle what’s happening so your next step becomes clearer."
+     - "I'm MindMantra. I don't give answers. I help you see yours."
 
 -------------------------------------
 STATE CONTEXT

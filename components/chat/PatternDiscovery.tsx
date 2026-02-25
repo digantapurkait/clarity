@@ -109,25 +109,39 @@ export default function PatternDiscovery({ userId }: { userId: number | null }) 
                             <div className="space-y-1">
                                 <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">Observed Pattern</span>
                                 <p className="text-[var(--text-primary)] text-sm">{pattern.summary_text}</p>
+                                <p className="text-[10px] text-[var(--text-muted)] mt-2 italic">
+                                    This insight is built from your reflections and conversations.
+                                </p>
                             </div>
 
-                            <div className={`space-y-4 transition-all ${!isPremium ? 'blur-sm select-none' : ''}`}>
-                                <div className="space-y-1">
-                                    <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">Prevention Insight</span>
-                                    <p className="text-[var(--text-primary)] text-sm">{pattern.prevention_suggestion}</p>
+                            <div className={`space-y-4 transition-all relative ${!isPremium ? 'overflow-hidden' : ''}`}>
+                                <div className={`space-y-4 ${!isPremium ? 'blur-[6px] select-none' : ''}`}>
+                                    <div className="space-y-1">
+                                        <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">Prevention Insight</span>
+                                        <p className="text-[var(--text-primary)] text-sm">{pattern.prevention_suggestion}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">Projected Recurrence</span>
+                                        <p className="text-[var(--text-primary)] text-sm font-mono">Next 48-72 hours if cognitive load remains high.</p>
+                                    </div>
                                 </div>
-                                <div className="space-y-1">
-                                    <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest">Projected Recurrence</span>
-                                    <p className="text-[var(--text-primary)] text-sm font-mono">Next 48-72 hours if cognitive load remains high.</p>
-                                </div>
+
+                                {!isPremium && (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 bg-gradient-to-t from-[var(--bg-deep)] to-transparent">
+                                        <p className="text-xs text-[var(--text-primary)] font-semibold mb-1">Pattern depth improves with more reflections.</p>
+                                        <p className="text-[10px] text-[var(--text-muted)] max-w-[200px]">Unlock full longitudinal analysis to see recurrence triggers.</p>
+                                    </div>
+                                )}
                             </div>
 
                             {!isPremium && (
                                 <div className="pt-4 text-center">
-                                    <p className="text-xs text-[var(--text-secondary)] mb-4">You've reached the edge of your current mental map.</p>
                                     <button className="w-full py-3 bg-[var(--accent)] rounded-xl text-xs font-bold text-white hover:scale-105 transition-transform shadow-lg shadow-[var(--accent-glow)]">
-                                        Unlock Full Pattern Map
+                                        Upgrade for Deep Intelligence
                                     </button>
+                                    <p className="text-[9px] text-[var(--text-muted)] mt-3">
+                                        Pattern awareness creates emotional advantage.
+                                    </p>
                                 </div>
                             )}
                         </div>

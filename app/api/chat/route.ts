@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     try {
         const authSession = await getServerSession(authOptions);
         const body = await req.json();
-        const { message, guestId, language = 'en', isClarityCheck = false } = body;
+        const { message, guestId, language = 'en', isClarityCheck = false, isBridge = false } = body;
 
         if (!message?.trim()) {
             return NextResponse.json({ error: 'Message required' }, { status: 400 });
@@ -101,10 +101,12 @@ export async function POST(req: NextRequest) {
             );
 
             if (contextScore < 45) {
-                return NextResponse.json({
-                    reply: "I can offer basic clarity now, but I'd need to understand a bit more about the patterns here to give you a full snapshot. Should we keep talking for a few more minutes?",
-                    suggestions: ["Yes, let's keep going", "What do you need to know?"],
-                    isIntervention: true
+                // Return intervention as a plain text response that the reader can handle
+                return new Response("I can offer basic clarity now, but I'd need to understand a bit more about the patterns here to give you a full snapshot. Should we keep talking for a few more minutes?__METADATA__" + JSON.stringify({
+                    isIntervention: true,
+                    suggestions: ["Yes, let's keep going", "What do you need to know?"]
+                }), {
+                    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
                 });
             }
         }
@@ -148,7 +150,12 @@ export async function POST(req: NextRequest) {
 
         const systemPrompt = buildSystemPrompt(
             context,
-            { emotionalState, phase: currentPhase.toLowerCase() },
+            {
+                emotionalState,
+                phase: currentPhase.toLowerCase(),
+                isBridge,
+                messageCount: session.message_count
+            },
             phaseDirective,
             language,
             isClarityCheck
@@ -157,6 +164,27 @@ export async function POST(req: NextRequest) {
         const encoder = new TextEncoder();
         let geminiStream;
         try {
+            if (isClarityCheck) {
+                // For full Clarity Checks, use non-streaming to ensure valid JSON
+                const aiReply = await chat(systemPrompt, (Array.isArray(history) ? history : []) as any);
+
+                // Save assistant message to DB
+                await query(
+                    'INSERT INTO messages (session_id, user_id, role, content) VALUES (?, ?, ?, ?)',
+                    [sessionId, userId || null, 'assistant', aiReply]
+                );
+
+                const metadata = {
+                    phase: currentPhase,
+                    sealed: false,
+                    score: calculateContextScore(session.message_count, session.emotional_depth_score, session.clarity_signal > 0.3)
+                };
+
+                return new Response(aiReply + "__METADATA__" + JSON.stringify(metadata), {
+                    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+                });
+            }
+
             geminiStream = await chatStream(
                 systemPrompt,
                 (Array.isArray(history) ? history : []) as { role: 'user' | 'assistant'; content: string }[]
@@ -251,16 +279,6 @@ export async function POST(req: NextRequest) {
                             await updateUserProfile(userId, tags.mood, tags.topic);
                         }
 
-                        // Generate Generic Contrast Response (non-streaming for metadata)
-                        let genericReply = "I'm sorry, I couldn't generate a generic contrast right now.";
-                        try {
-                            const genericPrompt = `Provide a standard, helpful, but surface-level AI assistant response to the user's last message. Do NOT apply any pattern intelligence or deep emotional reflection.
-                        Message: "${message}"`;
-                            const genericRes = await chat(genericPrompt, []);
-                            genericReply = genericRes;
-                        } catch (e) {
-                            console.error('Generic reply generation failed:', e);
-                        }
 
                         // Generate Curiosity Hook if clarity is high
                         let curiosityHook = null;
@@ -285,7 +303,7 @@ export async function POST(req: NextRequest) {
                             sealed: nextPhase === 'SEALED',
                             paceMs: PHASE_DELAY_MS[currentPhase],
                             mantra: currentPhase === 'CLOSURE' ? mantra : null,
-                            genericReply: genericReply,
+                            genericReply: null,
                             curiosityHook: curiosityHook
                         };
                         controller.enqueue(encoder.encode(`\n\n__METADATA__${JSON.stringify(metadata)}`));

@@ -17,6 +17,8 @@ interface Message {
     isClarity?: boolean;
     isIntervention?: boolean;
     suggestions?: string[];
+    genericReply?: string | null;
+    genericReplyLoading?: boolean;
 }
 
 const PHASE_OPTIONS: Record<string, string[]> = {
@@ -64,6 +66,7 @@ export default function ChatPage() {
             // Check for trigger context from URL
             const urlParams = new URLSearchParams(window.location.search);
             const trigger = urlParams.get('trigger');
+            const bridge = urlParams.get('bridge');
 
             // If user is logged in and was a guest, merge sessions
             if (session && guestId) {
@@ -105,6 +108,19 @@ export default function ChatPage() {
                         isClarity: m.isClarity
                     })));
                     setSealed(data.session?.sealed || false);
+                    setPhase(data.session?.phase || 'ENTRY');
+                } else if (bridge === 'true') {
+                    const landingReflection = localStorage.getItem('landing_reflection');
+                    if (landingReflection) {
+                        setMessages([{ role: 'user', content: landingReflection }]);
+                        localStorage.removeItem('landing_reflection');
+                        // Use a custom send logic to ensure it feels contextually correct
+                        setInitialized(true);
+                        setTimeout(() => handleBridgeMessage(landingReflection), 500);
+                        return;
+                    } else {
+                        setMessages([{ role: 'assistant', content: t('entryPrompt', lang) || "How are you arriving today?" }]);
+                    }
                 } else {
                     setMessages([{ role: 'assistant', content: t('entryPrompt', lang) || "How are you arriving today?" }]);
                 }
@@ -315,6 +331,95 @@ export default function ChatPage() {
         send(`Tell me more about: ${curiosityHook}`);
     };
 
+    const handleBridgeMessage = async (reflection: string) => {
+        setTyping(true);
+        setLoading(true);
+        const guestId = localStorage.getItem('guest_id');
+
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: `System: User started with reflection: "${reflection}". Acknowledge this naturally and bridge into exploration.`,
+                    guestId,
+                    language,
+                    isBridge: true // Flag to tell backend to be extra welcoming/contextual
+                }),
+            });
+
+            if (!res.ok) throw new Error('Bridge failed');
+
+            const reader = res.body?.getReader();
+            if (!reader) throw new Error('No reader');
+
+            const decoder = new TextDecoder();
+            let accumulatedReply = '';
+            setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                accumulatedReply += decoder.decode(value, { stream: true });
+                setMessages((prev) => {
+                    const next = [...prev];
+                    const last = next[next.length - 1];
+                    if (last && last.role === 'assistant') {
+                        last.content = accumulatedReply.split('__METADATA__')[0];
+                    }
+                    return next;
+                });
+            }
+            setTyping(false);
+            setLoading(false);
+        } catch (e) {
+            console.error('Bridge error:', e);
+            setTyping(false);
+            setLoading(false);
+        }
+    };
+
+    const fetchGenericReply = async (index: number) => {
+        const msg = messages[index];
+        if (!msg || msg.role !== 'assistant' || msg.genericReply || msg.genericReplyLoading) return;
+
+        // Find the user message before this assistant message
+        const lastUserMsg = messages.slice(0, index).reverse().find(m => m.role === 'user');
+        if (!lastUserMsg) return;
+
+        setMessages(prev => {
+            const next = [...prev];
+            next[index] = { ...next[index], genericReplyLoading: true };
+            return next;
+        });
+
+        try {
+            const res = await fetch('/api/chat/generic', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: lastUserMsg.content }),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setMessages(prev => {
+                    const next = [...prev];
+                    next[index] = { ...next[index], genericReply: data.genericReply, genericReplyLoading: false };
+                    return next;
+                });
+            } else {
+                throw new Error('Failed to fetch generic reply');
+            }
+        } catch (e) {
+            console.error('Generic reply fetch error:', e);
+            setMessages(prev => {
+                const next = [...prev];
+                next[index] = { ...next[index], genericReply: "Could not generate comparison.", genericReplyLoading: false };
+                return next;
+            });
+        }
+    };
+
     const handleRetry = () => {
         // Find the last user message
         const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
@@ -333,8 +438,21 @@ export default function ChatPage() {
             if (!loading && !typing && !sealed && messages.length > 2) {
                 setShowRecovery(true);
             }
-        }, 20000);
+        }, 25000); // 25 seconds of silence
         setInactivityTimer(timer);
+    };
+
+    const handleRefinedInteraction = async (choice: string) => {
+        setShowRecovery(false);
+        // Track the click for retention engine (PII)
+        const guestId = localStorage.getItem('guest_id');
+        await fetch('/api/user/curiosity', { // Reuse curiosity endpoint or create specific one
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hook: `Choice: ${choice}`, guestId })
+        });
+
+        send(choice);
     };
 
     useEffect(() => {
@@ -433,20 +551,98 @@ export default function ChatPage() {
                                     <p className="text-[var(--text-primary)] text-sm leading-relaxed">{msg.content}</p>
                                 </div>
                             ) : msg.isClarity ? (
-                                <div className="cl-snapshot-card w-full max-w-[90%] bg-[rgba(15,15,30,0.8)] border border-[rgba(251,191,36,0.3)] rounded-2xl p-5 space-y-4 backdrop-blur-xl relative overflow-hidden group">
-                                    <div className="absolute top-0 right-0 p-3 opacity-20 group-hover:opacity-40 transition-opacity">
-                                        <div className="w-12 h-12 rounded-full border border-[var(--accent)] animate-pulse" />
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--accent)] font-bold">Clarity Snapshot</span>
-                                    </div>
-                                    <div className="space-y-4 font-mono text-[13px] leading-relaxed whitespace-pre-wrap">
-                                        {msg.content}
-                                    </div>
-                                    <div className="pt-2 border-t border-white/5 flex justify-between items-center">
-                                        <span className="text-[10px] text-white/30 uppercase tracking-widest">MindMantra Analytical Layer</span>
-                                    </div>
-                                </div>
+                                (() => {
+                                    let data: any = null;
+                                    try {
+                                        // Attempt to parse if it looks like JSON, otherwise treat as raw text
+                                        if (msg.content.trim().startsWith('{')) {
+                                            data = JSON.parse(msg.content);
+                                        }
+                                    } catch (e) {
+                                        console.error('Clarity parse error:', e);
+                                    }
+
+                                    if (!data) return (
+                                        <div className="bg-[rgba(15,15,30,0.9)] border border-[rgba(251,191,36,0.2)] rounded-2xl p-6 text-sm italic text-[var(--text-muted)]">
+                                            {msg.content}
+                                        </div>
+                                    );
+
+                                    const isPremium = session?.user?.email?.endsWith('@gmail.com'); // Placeholder logic for now
+
+                                    return (
+                                        <div className="cl-snapshot-popup w-full max-w-[95%] bg-[#0A0A0F] border border-[rgba(251,191,36,0.3)] rounded-3xl p-7 space-y-7 shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden animate-in zoom-in-95 duration-500 backdrop-blur-2xl">
+                                            {/* Glow Accent */}
+                                            <div className="absolute -top-24 -right-24 w-48 h-48 bg-[var(--accent)] opacity-10 blur-[80px]" />
+
+                                            <div className="flex justify-between items-start border-b border-white/5 pb-4">
+                                                <div>
+                                                    <h3 className="text-[10px] items-center flex gap-1.5 uppercase tracking-[0.3em] text-[var(--accent)] font-bold mb-1">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+                                                        Clarity Snapshot
+                                                    </h3>
+                                                    <p className="text-[var(--text-muted)] text-[10px] uppercase tracking-widest leading-none">MindMantra Intelligence Layer</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-2xl font-light text-[var(--accent)]">{data.score}%</div>
+                                                    <div className="text-[8px] uppercase tracking-widest text-white/30">Clarity Index</div>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-2">
+                                                <div className="space-y-6">
+                                                    <div>
+                                                        <h4 className="text-[9px] uppercase tracking-widest text-red-400/80 mb-2 font-bold">What is messed up right now</h4>
+                                                        <p className="text-[13px] text-[var(--text-primary)] leading-relaxed font-medium">
+                                                            {data.messed_up}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-[9px] uppercase tracking-widest text-orange-400/80 mb-2 font-bold">What can be even worse</h4>
+                                                        <p className="text-[12px] text-[var(--text-secondary)] italic leading-relaxed">
+                                                            {data.future_risk}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-6">
+                                                    <div className="bg-white/5 border border-white/5 p-4 rounded-xl">
+                                                        <h4 className="text-[9px] uppercase tracking-widest text-[#4ADE80] mb-2 font-bold">Immediate next step</h4>
+                                                        <p className="text-[13px] text-white font-semibold leading-relaxed">
+                                                            {data.immediate_step}
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="relative">
+                                                        <h4 className="text-[9px] uppercase tracking-widest text-blue-400/80 mb-2 font-bold">Future strategic actions</h4>
+                                                        <div className={`space-y-2 transition-all duration-700 ${!isPremium ? 'blur-sm select-none opacity-40' : ''}`}>
+                                                            {Array.isArray(data.future_actions) ? data.future_actions.map((act: string, idx: number) => (
+                                                                <div key={idx} className="flex gap-2 text-[11px] text-[var(--text-secondary)]">
+                                                                    <span className="text-[var(--accent)] opacity-50">•</span>
+                                                                    <span>{act}</span>
+                                                                </div>
+                                                            )) : <p className="text-[11px] text-[var(--text-secondary)]">{data.future_actions}</p>}
+                                                        </div>
+                                                        {!isPremium && (
+                                                            <div className="absolute inset-0 flex flex-col items-center justify-center pt-4">
+                                                                <button className="px-3 py-1 bg-[var(--accent)] text-black text-[10px] font-bold uppercase tracking-widest rounded-full shadow-lg hover:scale-105 transition-transform">
+                                                                    Unlock Pathway
+                                                                </button>
+                                                                <p className="text-[8px] text-white/40 mt-2 uppercase tracking-tight">Premium Membership Required</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="pt-4 border-t border-white/5 flex justify-center">
+                                                <button className="text-[9px] uppercase tracking-[0.2em] text-white/20 hover:text-[var(--accent)] transition-colors">
+                                                    Dismiss Analysis
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })()
                             ) : (
                                 <div
                                     className={`relative max-w-[85%] px-4 py-3.5 rounded-2xl text-sm leading-relaxed ${msg.role === 'assistant'
@@ -456,19 +652,27 @@ export default function ChatPage() {
                                 >
                                     {msg.content}
 
-                                    {/* Contrast Toggle for last assistant message */}
-                                    {msg.role === 'assistant' && i === messages.length - 1 && lastGenericReply && (
+                                    {/* Contrast Toggle for assistant messages */}
+                                    {msg.role === 'assistant' && !msg.isMantra && !msg.isClarity && (
                                         <div className="mt-3 pt-3 border-t border-white/5">
-                                            <button
-                                                onClick={() => setShowContrast(!showContrast)}
-                                                className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors font-bold"
-                                            >
-                                                {showContrast ? '← Hide generic AI reply' : '👉 See generic AI reply'}
-                                            </button>
-                                            {showContrast && (
-                                                <div className="mt-2 p-3 rounded-lg bg-[rgba(255,255,255,0.03)] border border-white/5 text-[12px] text-[var(--text-secondary)] italic animate-in fade-in slide-in-from-top-1">
-                                                    <span className="text-[9px] uppercase tracking-widest text-[var(--text-muted)] block mb-1">Standard AI Baseline:</span>
-                                                    {lastGenericReply}
+                                            {!msg.genericReply && !msg.genericReplyLoading ? (
+                                                <button
+                                                    onClick={() => fetchGenericReply(i)}
+                                                    className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors font-bold flex items-center gap-2"
+                                                >
+                                                    👉 Compare with standard AI
+                                                </button>
+                                            ) : msg.genericReplyLoading ? (
+                                                <div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)] italic animate-pulse">
+                                                    <div className="w-2 h-2 rounded-full bg-[var(--accent)]" />
+                                                    Fetching standard response...
+                                                </div>
+                                            ) : (
+                                                <div className="animate-in fade-in slide-in-from-top-1">
+                                                    <span className="text-[9px] uppercase tracking-widest text-[var(--text-muted)] block mb-1 font-bold">Standard AI Baseline:</span>
+                                                    <div className="p-3 rounded-lg bg-[rgba(255,255,255,0.03)] border border-white/5 text-[12px] text-[var(--text-secondary)] italic">
+                                                        {msg.genericReply}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
@@ -518,13 +722,30 @@ export default function ChatPage() {
                         </div>
                     )}
 
-                    {/* Recovery Prompt */}
+                    {/* Revised Pause Recovery Prompt */}
                     {showRecovery && !sealed && (
-                        <div className="fixed bottom-32 left-1/2 -translate-x-1/2 w-full max-w-xs p-5 bg-[var(--bg-card)] border border-[var(--accent)] rounded-2xl shadow-2xl animate-in zoom-in-95 fade-in duration-300 z-50">
-                            <p className="text-sm font-medium text-[var(--text-primary)] mb-4 text-center">Want to refine this so the pattern becomes clearer?</p>
-                            <div className="flex flex-col gap-2">
-                                <button onClick={() => { setShowRecovery(false); setInput('Mental overvhelm'); send('Stuck in mind'); }} className="py-2.5 bg-[var(--accent)] rounded-xl text-xs font-bold text-white">Yes, refine it</button>
-                                <button onClick={() => setShowRecovery(false)} className="py-2.5 bg-[var(--bg-deep)] border border-[var(--border)] rounded-xl text-xs text-[var(--text-muted)]">I'm done for now</button>
+                        <div className="fixed bottom-36 left-1/2 -translate-x-1/2 w-full max-w-sm p-6 bg-[var(--bg-card)] border border-[var(--accent)] border-opacity-40 rounded-[32px] shadow-2xl animate-in zoom-in-95 fade-in duration-500 z-50 backdrop-blur-xl">
+                            <p className="text-sm font-semibold text-[var(--text-primary)] mb-5 text-center px-4">Want to refine this so the pattern becomes clearer?</p>
+                            <div className="grid grid-cols-1 gap-2.5">
+                                <button
+                                    onClick={() => handleRefinedInteraction("Stuck in mind")}
+                                    className="py-3 px-4 bg-[var(--accent)] rounded-2xl text-[13px] font-bold text-white hover:scale-[1.02] transition-transform flex justify-between items-center group"
+                                >
+                                    <span>Mental overwhelm</span>
+                                    <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                                </button>
+                                <button
+                                    onClick={() => handleRefinedInteraction("Too many tasks")}
+                                    className="py-3 px-4 bg-[rgba(var(--accent-rgb),0.1)] border border-[rgba(var(--accent-rgb),0.2)] rounded-2xl text-[13px] font-semibold text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.15)] transition-all"
+                                >
+                                    Task overload
+                                </button>
+                                <button
+                                    onClick={() => setShowRecovery(false)}
+                                    className="py-3 text-[11px] uppercase tracking-widest text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+                                >
+                                    I'm done for now
+                                </button>
                             </div>
                         </div>
                     )}

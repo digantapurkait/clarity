@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Typeflow from '@/components/landing/Typeflow';
 import ThemeToggle from '@/components/landing/ThemeToggle';
 import DemoChat from '@/components/landing/DemoChat';
+import LandingReflection from '@/components/landing/LandingReflection';
 
 export default function LandingPage() {
   return (
@@ -24,7 +25,7 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section className="relative pt-36 pb-24 px-6 text-center max-w-4xl mx-auto">
+      <section className="relative pt-16 pb-24 px-6 text-center max-w-4xl mx-auto">
         <div className="hero-orb left-1/2 top-0 -translate-x-1/2 -translate-y-1/3 opacity-40 blur-[120px]" />
         <div className="relative z-10 space-y-12">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-card)] text-xs text-[var(--text-muted)] mb-8 animate-in fade-in duration-1000">
@@ -38,21 +39,8 @@ export default function LandingPage() {
             </h1>
             <Typeflow />
           </div>
-          <div className="pt-0 space-y-4">
-            <Link
-              id="get-started-cta"
-              href="/onboarding"
-              className="inline-flex items-center gap-2 px-12 py-6 bg-[var(--accent)] rounded-2xl text-[18px] font-black text-white hover:opacity-90 transition-all hover:scale-[1.05] shadow-[0_20px_40px_rgba(var(--accent-rgb),0.4)] group"
-            >
-              Start first reflection
-              <span className="group-hover:translate-x-1 transition-transform">→</span>
-            </Link>
-            <div className="space-y-2">
-              <p className="text-[13px] text-[var(--text-muted)] font-semibold tracking-wide">
-                Most users recognize their first pattern within 3-5 minutes.
-              </p>
-            </div>
-          </div>
+
+          <LandingReflection />
         </div>
       </section>
 

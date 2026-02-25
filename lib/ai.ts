@@ -59,7 +59,12 @@ export async function chat(
                 })),
             });
 
-            const lastMessage = messages[messages.length - 1]?.content || "";
+            if (messages.length === 0) {
+                // Safeguard against empty messages which Gemini rejects
+                messages = [{ role: 'user', content: '...' }];
+            }
+
+            const lastMessage = messages[messages.length - 1]?.content || "...";
             let result = await chatSession.sendMessage(lastMessage);
             let text = result.response.text().trim();
 
@@ -147,7 +152,12 @@ export async function chatStream(
                 })),
             });
 
-            const lastMessage = messages[messages.length - 1]?.content || "";
+            if (messages.length === 0) {
+                // Safeguard against empty messages
+                messages = [{ role: 'user', content: '...' }];
+            }
+
+            const lastMessage = messages[messages.length - 1]?.content || "...";
             const result = await chatSession.sendMessageStream(lastMessage);
 
             // Peek at the tool call before returning the stream
