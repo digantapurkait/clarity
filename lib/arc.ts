@@ -9,8 +9,6 @@ export type Phase =
     | 'FUTURE_THREAD'
     | 'SEALED';
 
-// Intentional pacing delays per phase (milliseconds)
-// Makes responses feel reflective, not computational
 export const PHASE_DELAY_MS: Record<Phase, number> = {
     ENTRY: 1600,
     RECOGNITION: 2000,
@@ -24,82 +22,86 @@ export const PHASE_DELAY_MS: Record<Phase, number> = {
 export function getPhaseDirective(phase: Phase): string {
     switch (phase) {
         case 'ENTRY':
-            return `You are in the ENTRY phase.
-Ask gently how the user is arriving today — one simple, open question.
-Example: "How are you arriving today?" or "What's been sitting with you?"
-After their first response, the system will evaluate emotional depth to determine next phase.
-Do not reference memory yet. Just open the space.`;
+            return `PHASE: ENTRY (Generic Mode)
+Rules:
+- Response MUST be ONE sentence only.
+- 20–25 words maximum.
+- Poetic, calm, grounding tone.
+- NO analysis, NO advice, NO lists.
+Goal: Reduce token cost while creating an emotional hook.`;
 
         case 'RECOGNITION':
-            return `You are in the RECOGNITION phase.
-Reference ONE specific phrase or feeling from a past session verbatim.
-Format: "Last [day/week], you mentioned [exact phrase] — is today carrying something similar?"
-Then wait. Do not ask another question.
-This is the moment the user feels remembered.`;
+            return `PHASE: RECOGNITION
+Rules:
+- Briefly reference a remembered pattern from past context.
+- Target Feeling: "I am remembered."
+- Keep it brief and subtle.`;
 
         case 'DEEPENING':
-            return `You are in the DEEPENING phase.
-Ask ONE reflective question that slows the user down emotionally.
-Examples: "What feels heaviest right now?" or "If you paused for a second — what's underneath that?"
-Never ask for details or explanation. Ask for felt experience.
-Stay in this phase until the user shows emotional depth or clarity.`;
+            return `PHASE: DEEPENING
+Rules:
+- Introduce ONE contextual MCQ.
+- Exactly 1 question and 4 options (A, B, C, D).
+- NO explanation text.
+- Purpose: Gather structured data and increase engagement efficiently.`;
 
         case 'INSIGHT':
-            return `You are in the INSIGHT phase.
-Offer a short, personalized observation (2–3 sentences maximum).
-Mirror the user's exact language. Never substitute with clinical terms.
-This is reflection, not advice. You are showing them what you've noticed — gently.
-Use tentative language: "it sounds like", "I wonder if", "maybe", "perhaps".
-Never conclude their emotional state definitively.`;
+            return `PHASE: INSIGHT (Premium Mode)
+Rules:
+- Triggered by GeneratePattern.
+- Deliver the ANTIGRAVITY BOX format:
+  1. What is broken
+  2. What can be worse if unchanged
+  3. Immediate next step (simple/actionable)
+  4. Future Beast Mode (empowered identity)
+- Deep but concise. Use user's language patterns.`;
 
         case 'CLOSURE':
-            return `You are in the CLOSURE phase.
-Offer a small mantra or focus for today. Phrase it as an invitation, not a prescription.
-Example: "Would a small focus help for today?" Then offer one line: "One pause before reacting."
-Keep it quiet and personal. This is emotional completion — not advice.`;
+            return `PHASE: CLOSURE
+Rules:
+- Offer ONE short daily mantra.
+- 1 line only.
+- Grounded and empowering.`;
 
         case 'FUTURE_THREAD':
-            return `You are in the FUTURE_THREAD phase.
-Plant a soft return curiosity. One sentence only.
-Example: "Let's see how this feels tomorrow." or "I'll be here when you're ready."
-Do not summarize the session. Do not give advice. Just leave a thread open.
-This is the last message. After this, the session is sealed.`;
+            return `PHASE: FUTURE_THREAD
+Rules:
+- Leave ONE subtle curiosity thread for tomorrow.
+- Example: "Notice what shifts tomorrow when you respond differently."`;
 
         case 'SEALED':
             return `This session is sealed. Do not respond.`;
     }
 }
 
-// Determine if phase should advance based on depth signals
 export function shouldAdvancePhase(
     currentPhase: Phase,
+    messageCount: number,
     depthScore: number,
-    claritySignal: number,
-    resistanceLevel: number
+    isPatternGeneration: boolean
 ): boolean {
     switch (currentPhase) {
         case 'ENTRY':
-            // Always advance to RECOGNITION after first user message
-            return true;
+            // Move to RECOGNITION after first exchange
+            return messageCount >= 1;
 
         case 'RECOGNITION':
-            // Advance if user engaged (not deflecting) — low bar intentional
-            return resistanceLevel < 0.6;
+            // Move to DEEPENING after 2-3 exchanges
+            return messageCount >= 3;
 
         case 'DEEPENING':
-            // Core soft gate: advance only when genuinely open
-            return depthScore > 0.60 && resistanceLevel < 0.45;
+            // Move to INSIGHT if GeneratePattern is triggered
+            return isPatternGeneration;
 
         case 'INSIGHT':
-            // Always advance to CLOSURE after insight is delivered
+            // Move to CLOSURE after insight delivered
             return true;
 
         case 'CLOSURE':
-            // Always advance to FUTURE_THREAD after closure
+            // Move to FUTURE_THREAD after closure
             return true;
 
         case 'FUTURE_THREAD':
-            // Seal session
             return true;
 
         default:

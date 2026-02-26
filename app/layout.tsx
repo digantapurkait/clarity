@@ -11,6 +11,8 @@ export const metadata: Metadata = {
     "A daily emotional clarity companion that remembers your patterns, reflects your language, and helps you feel understood without judgment.",
 };
 
+import GlobalNavbar from "@/components/GlobalNavbar";
+
 export default function RootLayout({
   children,
 }: {
@@ -19,7 +21,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className="bg-[#0a0a0f] text-white antialiased">
-        <Providers>{children}</Providers>
+        <Providers>
+          <GlobalNavbar />
+          {children}
+        </Providers>
       </body>
     </html>
   );

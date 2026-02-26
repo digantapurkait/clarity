@@ -8,6 +8,7 @@ import Link from 'next/link';
 import PatternDiscovery from '@/components/chat/PatternDiscovery';
 import PIIScoreIndicator from '@/components/chat/PIIScoreIndicator';
 import { useSession, signOut } from 'next-auth/react';
+import MCQOverlay from '@/components/chat/MCQOverlay';
 
 interface Message {
     role: 'user' | 'assistant';
@@ -40,6 +41,8 @@ export default function ChatPage() {
     const [initialized, setInitialized] = useState(false);
     const [language, setLanguage] = useState('en');
     const [showSignup, setShowSignup] = useState(false);
+    const [showInitialAuthPrompt, setShowInitialAuthPrompt] = useState(false);
+    const [showSkipConfirmation, setShowSkipConfirmation] = useState(false);
     const [lastGenericReply, setLastGenericReply] = useState<string | null>(null);
     const [showContrast, setShowContrast] = useState(false);
     const [inactivityTimer, setInactivityTimer] = useState<NodeJS.Timeout | null>(null);
@@ -47,6 +50,33 @@ export default function ChatPage() {
     const [curiosityHook, setCuriosityHook] = useState<string | null>(null);
     const [phase, setPhase] = useState<string>('ENTRY');
     const [curiosityClicked, setCuriosityClicked] = useState(false);
+
+    // MCQ State
+    const [activeMCQ, setActiveMCQ] = useState<{ question: string; options: string[] } | null>(null);
+    const [showMCQ, setShowMCQ] = useState(false);
+
+    // Prompt for auth immediately if guest
+    useEffect(() => {
+        if (!session && initialized) {
+            setShowInitialAuthPrompt(true);
+        }
+    }, [session, initialized]);
+
+    const handleAuthRedirect = () => {
+        // Save current chat state to help return back
+        localStorage.setItem('pending_chat_context', JSON.stringify(messages));
+        window.location.href = `/auth/signin?callbackUrl=${encodeURIComponent(window.location.pathname + '?bridge=true')}`;
+    };
+
+    const handleSkip = () => {
+        setShowInitialAuthPrompt(false);
+        setShowSkipConfirmation(true);
+    };
+
+    const handleConfirmSkip = () => {
+        setShowSkipConfirmation(false);
+        // Continue with guest session
+    };
 
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -236,9 +266,9 @@ export default function ChatPage() {
                 const chunk = decoder.decode(value, { stream: true });
 
                 if (chunk.includes('__METADATA__')) {
-                    const [contentPart, metadataPart] = chunk.split('__METADATA__');
-                    accumulatedReply += contentPart;
-                    metadataBuffer += metadataPart;
+                    const parts = chunk.split('__METADATA__');
+                    accumulatedReply += parts[0];
+                    metadataBuffer += parts[1] || '';
                     metadataReceived = true;
                 } else if (metadataReceived) {
                     metadataBuffer += chunk;
@@ -268,44 +298,47 @@ export default function ChatPage() {
                 });
             }
 
-            if (metadataReceived) {
+            // After stream ends, process metadata
+            if (metadataBuffer) {
                 try {
                     const metadata = JSON.parse(metadataBuffer);
-                    setSealed(metadata.sealed);
 
-                    if (metadata.mantra) {
-                        setMessages((prev) => {
-                            const next = [...prev];
-                            const last = next[next.length - 1];
-                            if (last && last.role === 'assistant') {
+                    setMessages((prev) => {
+                        const next = [...prev];
+                        const last = next[next.length - 1];
+                        if (last && last.role === 'assistant') {
+                            if (metadata.mantra) {
                                 last.isMantra = true;
                                 last.content = metadata.mantra;
                             }
-                            return next;
-                        });
-                    }
+                            if (metadata.suggestions) {
+                                last.suggestions = metadata.suggestions;
+                            }
+                        }
+                        return next;
+                    });
 
-                    if (metadata.genericReply) {
-                        setLastGenericReply(metadata.genericReply);
-                    }
-
-                    if (metadata.sealed && !session) {
-                        setTimeout(() => setShowSignup(true), 2500);
-                    }
+                    if (metadata.genericReply) setLastGenericReply(metadata.genericReply);
+                    if (metadata.sealed && !session) setTimeout(() => setShowSignup(true), 2500);
                     if (metadata.curiosityHook) {
                         setCuriosityHook(metadata.curiosityHook);
                         setCuriosityClicked(false);
                     }
-                    if (metadata.phase) {
-                        setPhase(metadata.phase);
+                    if (metadata.phase) setPhase(metadata.phase);
+                    if (metadata.suggestions) setSuggestions(metadata.suggestions);
+                    if (metadata.sealed) setSealed(true);
+
+                    if (metadata.mcq) {
+                        setActiveMCQ(metadata.mcq);
+                        setTimeout(() => setShowMCQ(true), 1500);
                     }
+
                     resetInactivityTimer();
                 } catch (e) {
                     console.error('Failed to parse session metadata:', e);
                 }
             }
-
-        } catch (e) {
+        } catch (e: any) {
             console.error('Chat error:', e);
             setTyping(false);
             setLoading(false);
@@ -314,6 +347,9 @@ export default function ChatPage() {
                 isError: true,
                 content: t('errorQuiet', language) || "Something went quiet. I'm still here — try again.",
             }]);
+        } finally {
+            setLoading(false);
+            setTyping(false);
         }
     };
 
@@ -335,16 +371,21 @@ export default function ChatPage() {
         setTyping(true);
         setLoading(true);
         const guestId = localStorage.getItem('guest_id');
+        const initialScore = parseInt(localStorage.getItem('initial_pii_score') || '18');
+
+        // Add a placeholder assistant message for the bridge response
+        setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
 
         try {
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    message: `System: User started with reflection: "${reflection}". Acknowledge this naturally and bridge into exploration.`,
+                    message: reflection,
                     guestId,
                     language,
-                    isBridge: true // Flag to tell backend to be extra welcoming/contextual
+                    isBridge: true,
+                    initialScore
                 }),
             });
 
@@ -355,28 +396,70 @@ export default function ChatPage() {
 
             const decoder = new TextDecoder();
             let accumulatedReply = '';
-            setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
+            let metadataBuffer = '';
+            let metadataReceived = false;
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                accumulatedReply += decoder.decode(value, { stream: true });
+                const chunk = decoder.decode(value, { stream: true });
+
+                if (chunk.includes('__METADATA__')) {
+                    const parts = chunk.split('__METADATA__');
+                    accumulatedReply += parts[0];
+                    metadataBuffer += parts[1] || '';
+                    metadataReceived = true;
+                } else if (metadataReceived) {
+                    metadataBuffer += chunk;
+                } else {
+                    accumulatedReply += chunk;
+                }
+
                 setMessages((prev) => {
                     const next = [...prev];
                     const last = next[next.length - 1];
                     if (last && last.role === 'assistant') {
-                        last.content = accumulatedReply.split('__METADATA__')[0];
+                        last.content = accumulatedReply;
                     }
                     return next;
                 });
             }
+
+            if (metadataBuffer) {
+                try {
+                    const metadata = JSON.parse(metadataBuffer);
+                    if (metadata.phase) setPhase(metadata.phase);
+                    if (metadata.suggestions) setSuggestions(metadata.suggestions);
+                    if (metadata.mcq) {
+                        setActiveMCQ(metadata.mcq);
+                        setTimeout(() => setShowMCQ(true), 1500);
+                    }
+                } catch (e) {
+                    console.error('Bridge metadata error:', e);
+                }
+            }
+
             setTyping(false);
             setLoading(false);
         } catch (e) {
             console.error('Bridge error:', e);
             setTyping(false);
             setLoading(false);
+            setMessages((prev) => {
+                const next = [...prev];
+                const last = next[next.length - 1];
+                if (last && last.role === 'assistant') {
+                    last.content = "I'm here, but I had a momentary lapse in connection. Let's continue.";
+                    last.isError = true;
+                }
+                return next;
+            });
         }
+    };
+
+    const handleMCQSelect = (option: string) => {
+        send(`My reflection: ${option}`);
+        setShowMCQ(false);
     };
 
     const fetchGenericReply = async (index: number) => {
@@ -435,12 +518,27 @@ export default function ChatPage() {
     const resetInactivityTimer = () => {
         if (inactivityTimer) clearTimeout(inactivityTimer);
         const timer = setTimeout(() => {
-            if (!loading && !typing && !sealed && messages.length > 2) {
-                setShowRecovery(true);
-            }
-        }, 25000); // 25 seconds of silence
+            setShowRecovery(true);
+        }, 60000); // 1 minute of inactivity
         setInactivityTimer(timer);
+
+        // Track last activity for 15-minute session timeout
+        localStorage.setItem('last_activity', Date.now().toString());
     };
+
+    // Session timeout checker
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const lastActivity = localStorage.getItem('last_activity');
+            if (lastActivity && session) {
+                const diff = Date.now() - parseInt(lastActivity);
+                if (diff > 15 * 60 * 1000) { // 15 minutes
+                    signOut({ callbackUrl: '/?timeout=true' });
+                }
+            }
+        }, 30000); // Check every 30 seconds
+        return () => clearInterval(interval);
+    }, [session]);
 
     const handleRefinedInteraction = async (choice: string) => {
         setShowRecovery(false);
@@ -477,48 +575,76 @@ export default function ChatPage() {
     const userId = (session?.user as any)?.id || null;
 
     return (
-        <div className="min-h-screen flex flex-col relative">
-            {/* Full-width Header */}
-            <header className="px-6 py-4 flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-deep)] z-10 sticky top-0">
-                <div className="flex items-center gap-4">
-                    <Link href="/" className="flex items-center gap-2 group transition-opacity hover:opacity-80">
-                        <div className="w-7 h-7 rounded-lg bg-[var(--accent)] flex items-center justify-center text-white text-xs font-bold">M</div>
-                        <span className="font-semibold text-[var(--text-primary)] tracking-tight">MindMantra</span>
-                    </Link>
-                    <div className="h-4 w-px bg-[var(--border)] hidden sm:block mx-1" />
-                    <span className="text-sm font-medium text-[var(--text-muted)] hidden sm:block">{name}</span>
-                </div>
-
-                <div className="flex items-center gap-6">
-                    <PIIScoreIndicator userId={userId} />
-                    <PatternDiscovery userId={userId} />
-
-                    <div className="flex items-center gap-3">
-                        <select
-                            value={language}
-                            onChange={(e) => handleLanguageChange(e.target.value)}
-                            className="bg-transparent text-xs text-[var(--text-muted)] border-none focus:ring-0 cursor-pointer"
-                        >
-                            {languages.map(l => <option key={l.code} value={l.code} className="bg-[var(--bg-card)]">{l.name}</option>)}
-                        </select>
-
-                        {session ? (
+        <div className="min-h-screen flex flex-col relative pt-20">
+            {showMCQ && activeMCQ && (
+                <MCQOverlay
+                    question={activeMCQ.question}
+                    options={activeMCQ.options}
+                    onSelect={handleMCQSelect}
+                    onClose={() => setShowMCQ(false)}
+                />
+            )}
+            {/* Initial Auth Interstitial */}
+            {showInitialAuthPrompt && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-[rgba(var(--bg-deep-rgb),0.8)] backdrop-blur-xl animate-in fade-in duration-500">
+                    <div className="max-w-md w-full bg-[var(--bg-card)] border border-[var(--border)] rounded-[32px] p-8 shadow-2xl space-y-8 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--accent)] opacity-[0.05] blur-[40px]" />
+                        <div className="text-center space-y-4">
+                            <div className="w-12 h-12 bg-[var(--accent-soft)] rounded-2xl flex items-center justify-center mx-auto text-[var(--accent)] text-xl font-bold">M</div>
+                            <h2 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">One small step for your mind.</h2>
+                            <p className="text-sm text-[var(--text-secondary)] leading-relaxed px-4">
+                                Sign in to ensure your sessions are remembered and your emotional patterns are preserved securely.
+                            </p>
+                        </div>
+                        <div className="space-y-3">
                             <button
-                                onClick={() => signOut({ callbackUrl: '/' })}
-                                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                                onClick={handleAuthRedirect}
+                                className="w-full py-4 bg-[var(--accent)] rounded-2xl text-[16px] font-bold text-white hover:opacity-90 transition-all hover:scale-[1.02] shadow-lg"
                             >
-                                leave
+                                Secure my patterns
                             </button>
-                        ) : (
-                            <div className="flex items-center gap-3">
-                                <Link href="/auth/signin" className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
-                                    sign in
-                                </Link>
-                            </div>
-                        )}
+                            <button
+                                onClick={handleSkip}
+                                className="w-full py-3 text-[12px] uppercase tracking-widest text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors font-bold"
+                            >
+                                Skip for now
+                            </button>
+                        </div>
+                        <p className="text-[11px] text-center text-[var(--text-muted)]">
+                            MindMantra is completely free.
+                        </p>
                     </div>
                 </div>
-            </header>
+            )}
+
+            {/* Skip Confirmation (Value Prop) */}
+            {showSkipConfirmation && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-[rgba(var(--bg-deep-rgb),0.8)] backdrop-blur-xl animate-in zoom-in duration-300">
+                    <div className="max-w-md w-full bg-[var(--bg-card)] border border-[var(--border)] rounded-[32px] p-8 shadow-2xl space-y-6">
+                        <div className="space-y-3 text-center">
+                            <span className="inline-block px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase tracking-widest">Wait — there's more</span>
+                            <h3 className="text-xl font-bold text-[var(--text-primary)]">Are you sure?</h3>
+                            <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+                                Without signing in, you’re missing out on **deep insights** and **memory patterns** that build over time. MindMantra works best when it knows your history. It’s completely free.
+                            </p>
+                        </div>
+                        <div className="space-y-3">
+                            <button
+                                onClick={handleAuthRedirect}
+                                className="w-full py-4 bg-[var(--accent)] rounded-2xl text-[16px] font-bold text-white hover:scale-[1.02] transition-all"
+                            >
+                                Actually, sign me in
+                            </button>
+                            <button
+                                onClick={handleConfirmSkip}
+                                className="w-full py-3 text-[12px] uppercase tracking-widest text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors font-bold"
+                            >
+                                Continue as guest anyway
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Centered Chat Content Container */}
             <div className="flex-1 flex flex-col max-w-xl mx-auto w-full px-4 overflow-hidden">
@@ -728,17 +854,17 @@ export default function ChatPage() {
                             <p className="text-sm font-semibold text-[var(--text-primary)] mb-5 text-center px-4">Want to refine this so the pattern becomes clearer?</p>
                             <div className="grid grid-cols-1 gap-2.5">
                                 <button
-                                    onClick={() => handleRefinedInteraction("Stuck in mind")}
+                                    onClick={() => handleRefinedInteraction("Refine Chat")}
                                     className="py-3 px-4 bg-[var(--accent)] rounded-2xl text-[13px] font-bold text-white hover:scale-[1.02] transition-transform flex justify-between items-center group"
                                 >
-                                    <span>Mental overwhelm</span>
+                                    <span>Refine Chat</span>
                                     <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
                                 </button>
                                 <button
-                                    onClick={() => handleRefinedInteraction("Too many tasks")}
+                                    onClick={() => handleRefinedInteraction("Continue Discovering Patterns")}
                                     className="py-3 px-4 bg-[rgba(var(--accent-rgb),0.1)] border border-[rgba(var(--accent-rgb),0.2)] rounded-2xl text-[13px] font-semibold text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.15)] transition-all"
                                 >
-                                    Task overload
+                                    Continue Discovering Patterns
                                 </button>
                                 <button
                                     onClick={() => setShowRecovery(false)}

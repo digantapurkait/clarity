@@ -38,16 +38,17 @@ Extract signals.
 
 Return JSON:
 {
-  "mood": "one word",
-  "topic": "one word",
+  "mood": "one word representing current emotional state",
+  "topic": "the primary subject/domain of the message",
   "stress_level": 0.0-1.0,
   "emotional_depth_score": 0.0-1.0,
   "clarity_signal": 0.0-1.0,
   "resistance_level": 0.0-1.0,
   "energy_level": 0-10,
   "cognitive_load_score": 0.0-1.0,
-  "intent_type": "string",
-  "trigger_keywords": ["string"],
+  "intent_type": "venting|clarity|avoidance|validation",
+  "trigger_keywords": ["specific words indicating stress or activation"],
+  "repeating_themes": ["patterns that seem to be recurring from context"],
   "sentiment_score": -1.0-1.0,
   "user_archetype": "builder|explorer|analyzer|dreamer (optional)",
   "dominant_drive": "short string (optional)",
@@ -100,6 +101,9 @@ export function calculatePIIScore(
     if (tags.emotional_depth_score > 0.7) delta += 3;
     if (tags.resistance_level > 0.7) delta -= 2;
     if (tags.cognitive_load_score > 0.8) delta -= 1;
+
+    // Minimum positive increment of +1 per response
+    if (delta <= 0) delta = 1;
 
     return Math.max(0, currentPII + delta);
 }
@@ -287,7 +291,7 @@ export async function syncConversationState(
             [
                 phase,
                 tags.mood,
-                tags.clarity_signal > 0.5 ? 5 : 0,
+                (tags.clarity_signal > 0.5 ? 5 : 2),
                 tags.resistance_level > 0.5 ? 'low' : 'high',
                 stateExists[0].id
             ]
@@ -296,7 +300,7 @@ export async function syncConversationState(
         await query(`
             INSERT INTO conversation_state (user_id, guest_id, current_phase, emotional_tone, clarity_progress, engagement_level)
             VALUES (?, ?, ?, ?, ?, ?)`,
-            [userId, guestId, phase, tags.mood, tags.clarity_signal > 0.5 ? 5 : 0, 'medium']
+            [userId, guestId, phase, tags.mood, Math.max(5, tags.clarity_signal * 10), 'medium']
         );
     }
 

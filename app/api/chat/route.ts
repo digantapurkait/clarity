@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     try {
         const authSession = await getServerSession(authOptions);
         const body = await req.json();
-        const { message, guestId, language = 'en', isClarityCheck = false, isBridge = false } = body;
+        const { message, guestId, language = 'en', isClarityCheck = false, isBridge = false, initialScore } = body;
 
         if (!message?.trim()) {
             return NextResponse.json({ error: 'Message required' }, { status: 400 });
@@ -83,30 +83,59 @@ export async function POST(req: NextRequest) {
                 id: insertResult.insertId,
                 phase: 'ENTRY',
                 emotional_depth_score: 0,
-                clarity_signal: 0,
+                clarity_signal: isBridge && initialScore ? initialScore / 100 : 0,
                 resistance_level: 0,
                 message_count: 0
             };
+
+            if (isBridge && initialScore) {
+                await query('UPDATE sessions SET clarity_signal = ? WHERE id = ?', [initialScore / 100, session.id]);
+
+                // For guests, we need to ensure conversation_state exists to persist the score
+                if (!userId && guestId) {
+                    const stateExists = await query<any[]>('SELECT id FROM conversation_state WHERE guest_id = ?', [guestId]);
+                    if (stateExists.length === 0) {
+                        await query(
+                            'INSERT INTO conversation_state (guest_id, current_phase, clarity_progress) VALUES (?, ?, ?)',
+                            [guestId, 'ENTRY', initialScore]
+                        );
+                    } else {
+                        await query(
+                            'UPDATE conversation_state SET clarity_progress = GREATEST(clarity_progress, ?) WHERE guest_id = ?',
+                            [initialScore, guestId]
+                        );
+                    }
+                }
+
+                // Also update user's pii_score if applicable
+                if (userId) {
+                    await query('UPDATE users SET pii_score = ? WHERE id = ?', [initialScore, userId]);
+                }
+            }
         }
 
+        // Initialize session and context
         const sessionId = session.id;
         const currentPhase = session.phase as Phase;
 
-        // Clarity Check Logic
-        if (isClarityCheck) {
-            const contextScore = calculateContextScore(
-                session.message_count,
-                session.emotional_depth_score,
-                session.clarity_signal > 0.3 // Simple pattern heuristic
-            );
+        const context = await getUserContext(userId, guestId);
+        if (!context) {
+            return NextResponse.json({ error: 'Could not load context' }, { status: 500 });
+        }
 
-            if (contextScore < 45) {
-                // Return intervention as a plain text response that the reader can handle
-                return new Response("I can offer basic clarity now, but I'd need to understand a bit more about the patterns here to give you a full snapshot. Should we keep talking for a few more minutes?__METADATA__" + JSON.stringify({
-                    isIntervention: true,
-                    suggestions: ["Yes, let's keep going", "What do you need to know?"]
-                }), {
-                    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        // If user triggers GeneratePattern (isClarityCheck), we should be in INSIGHT mode
+        // Free users have limited premium triggers
+        const isPremium = (context.user as any)?.is_premium || false;
+        let activePhase = currentPhase;
+
+        if (isClarityCheck && currentPhase === 'DEEPENING') {
+            if (isPremium || session.message_count < 10) {
+                activePhase = 'INSIGHT';
+            } else {
+                return NextResponse.json({
+                    reply: "You've uncovered some deep patterns today. Full Pattern Maps are unlocked for premium members. Would you like to save your progress and continue with a simple reflection?",
+                    phase: currentPhase,
+                    suggestions: ["How do I get premium?", "Keep talking"]
                 });
             }
         }
@@ -125,34 +154,26 @@ export async function POST(req: NextRequest) {
             [sessionId, userId || null, 'user', message]
         );
 
-        // Fetch full context
-        const context = await getUserContext(userId, guestId);
-        if (!context) {
-            return NextResponse.json({ error: 'Could not load context' }, { status: 500 });
-        }
-
         const history = await query<DBMessage[]>(
             `SELECT role, content FROM messages
              WHERE session_id = ? ORDER BY created_at ASC`,
             [sessionId]
         );
 
-        const phaseDirective = getPhaseDirective(currentPhase);
+        const phaseDirective = getPhaseDirective(activePhase as Phase);
 
         // Calculate dynamic context tags
         const emotionalState = session.resistance_level > 0.6
             ? 'frustration'
             : session.emotional_depth_score > 0.6
                 ? 'deepening'
-                : session.clarity_signal > 0.6
-                    ? 'clarity'
-                    : 'recognition';
+                : 'calm';
 
         const systemPrompt = buildSystemPrompt(
             context,
             {
                 emotionalState,
-                phase: currentPhase.toLowerCase(),
+                phase: activePhase,
                 isBridge,
                 messageCount: session.message_count
             },
@@ -231,13 +252,37 @@ export async function POST(req: NextRequest) {
                         const newClarity = (session!.clarity_signal * 0.4 + tags.clarity_signal * 0.6);
                         const newResistance = (session!.resistance_level * 0.4 + tags.resistance_level * 0.6);
 
-                        const advance = shouldAdvancePhase(currentPhase, newDepth, newClarity, newResistance);
+                        const advance = shouldAdvancePhase(
+                            currentPhase,
+                            session.message_count + 1,
+                            newDepth,
+                            isClarityCheck // Map isClarityCheck to isPatternGeneration
+                        );
                         if (advance) {
                             nextPhase = getNextPhase(currentPhase);
                         }
 
                         if (currentPhase === 'CLOSURE') {
                             mantra = aiReply.split('\n').find(l => l.length > 10 && l.length < 120) || aiReply.slice(0, 100);
+                        }
+
+                        // Trigger MCQ if message count is 4 or 5 and we haven't shown one yet this session
+                        let mcq: any = null;
+                        if ((session.message_count + 1) === 4 || (session.message_count + 1) === 5) {
+                            const mcqPrompt = `Based on this conversation, generate ONE natural, contextual multiple-choice question to help identify the user's mental pattern. 
+                            The question must feel like a genuine part of the dialogue, not random.
+                            Transcript:
+                            ${transcript}
+                            
+                            Return ONLY a JSON object: { "question": "...", "options": ["...", "...", "...", "..."] } 
+                            Ensure exactly 4 distinct options.`;
+
+                            const mcqJson = await chat(mcqPrompt, []);
+                            try {
+                                mcq = JSON.parse(mcqJson);
+                            } catch (e) {
+                                console.error('MCQ parse error:', e);
+                            }
                         }
 
                         await query(
@@ -280,21 +325,35 @@ export async function POST(req: NextRequest) {
                         }
 
 
-                        // Generate Curiosity Hook if clarity is high
+                        // Generate Curiosity Hook and Contextual Suggestions
                         let curiosityHook = null;
-                        if (tags.clarity_signal > 0.6 || tags.emotional_depth_score > 0.7) {
+                        let contextualSuggestions: string[] = [];
+
+                        try {
+                            // 1. Suggestions based on last AI query
+                            const suggestPrompt = `You are a pattern-intelligence system. Based on your last response below, generate 3 short (1-4 words) suggestion chips for the user to reply with. 
+                            The suggestions should feel like natural next steps in self-reflection.
+                            Response: "${aiReply.slice(-500)}"
+                            Return ONLY a JSON array of strings. Example: ["Why do I do this?", "Tell me more", "I feel this too"]`;
+
+                            const suggestionsJson = await chat(suggestPrompt, []);
                             try {
-                                const hookPrompt = `You are a pattern-intelligence system. Generate a short (max 10 words) "Curiosity Hook" for the user. 
-                            It should be a teaser for a deeper insight you're starting to see about their patterns. 
-                            Make it sound like a "bridge" to something they haven't seen yet. 
-                            Current Pattern Snapshot: "${tags.topic} - ${tags.mood}"
-                            Transcript: "${transcript.slice(-500)}"
-                            Example: "There's a rhythm to how you avoid the big topics..."
-                            Example: "I'm noticing a link between your energy and how you speak about work..."`;
-                                curiosityHook = await chat(hookPrompt, []);
+                                contextualSuggestions = JSON.parse(suggestionsJson);
                             } catch (e) {
-                                console.error('Curiosity hook generation failed:', e);
+                                // Fallback to generic if JSON fails
+                                contextualSuggestions = ["Tell me more", "I see it", "Reflect deeper"];
                             }
+
+                            // 2. Curiosity Hook if clarity is high
+                            if (tags.clarity_signal > 0.6 || tags.emotional_depth_score > 0.7) {
+                                const hookPrompt = `You are a pattern-intelligence system. Generate a short (max 10 words) "Curiosity Hook" for the user. 
+                                It should be a teaser for a deeper insight you're starting to see about their patterns. 
+                                Current Pattern Snapshot: "${tags.topic} - ${tags.mood}"
+                                Transcript: "${transcript.slice(-500)}"`;
+                                curiosityHook = await chat(hookPrompt, []);
+                            }
+                        } catch (e) {
+                            console.error('Meta-generation failed:', e);
                         }
 
                         // Final metadata chunk
@@ -304,7 +363,8 @@ export async function POST(req: NextRequest) {
                             paceMs: PHASE_DELAY_MS[currentPhase],
                             mantra: currentPhase === 'CLOSURE' ? mantra : null,
                             genericReply: null,
-                            curiosityHook: curiosityHook
+                            curiosityHook: curiosityHook,
+                            suggestions: contextualSuggestions
                         };
                         controller.enqueue(encoder.encode(`\n\n__METADATA__${JSON.stringify(metadata)}`));
                     } catch (e) {
